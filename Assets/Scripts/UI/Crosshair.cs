@@ -15,7 +15,7 @@ public static class Crosshair
     public static int style = 0, color = 0;
     public static float length = 9f, thickness = 1.5f, gap = 5f, opacity = 0.9f, dot = 2.5f;
     public static bool outline = true, dynamic = true, hitmarker = true;
-    public static float sensitivity = 1f, fov = 78f;
+    public static float sensitivity = 1f, fov = 78f, volume = 1f;
     public static bool menuOpen;
 
     static bool loaded;
@@ -36,8 +36,16 @@ public static class Crosshair
         hitmarker = PlayerPrefs.GetInt("mira_hitmarker", hitmarker ? 1 : 0) == 1;
         sensitivity = PlayerPrefs.GetFloat("sensibilidade", sensitivity);
         fov = PlayerPrefs.GetFloat("fov", fov);
+        volume = Mathf.Clamp01(PlayerPrefs.GetFloat("volume", volume));
+        ApplyVolume();
         style = Mathf.Clamp(style, 0, STYLES.Length - 1);
         color = Mathf.Clamp(color, 0, COLORS.Length - 1);
+    }
+
+    /// Volume geral; os modos de teste automático continuam mudos.
+    public static void ApplyVolume()
+    {
+        if (!(Game.autotest || Game.physTest || Game.stressTest || Game.shotsDir != "")) AudioListener.volume = volume;
     }
 
     public static void Save()
@@ -54,6 +62,7 @@ public static class Crosshair
         PlayerPrefs.SetInt("mira_hitmarker", hitmarker ? 1 : 0);
         PlayerPrefs.SetFloat("sensibilidade", sensitivity);
         PlayerPrefs.SetFloat("fov", fov);
+        PlayerPrefs.SetFloat("volume", volume);
         PlayerPrefs.Save();
     }
 
@@ -138,7 +147,7 @@ public static class Crosshair
             sTitle = new GUIStyle(GUI.skin.label) { fontSize = 20, fontStyle = FontStyle.Bold };
             sLabel = new GUIStyle(GUI.skin.label) { fontSize = 14 };
         }
-        var r = new Rect(vw * 0.5f - 300, H * 0.5f - 300, 600, 600);
+        var r = new Rect(vw * 0.5f - 300, H * 0.5f - 330, 600, 660);
         fill(r, new Color(0.04f, 0.04f, 0.06f, 0.93f));
         GUILayout.BeginArea(new Rect(r.x + 20, r.y + 14, r.width - 40, r.height - 28));
         GUILayout.Label("CONFIGURAÇÕES DE MIRA", sTitle);
@@ -158,11 +167,15 @@ public static class Crosshair
         sensitivity = Slider("Sensibilidade", sensitivity, 0.2f, 3f, "F2");
         fov = Slider("Campo de visão", fov, 60f, 100f, "F0");
         GUILayout.Space(10);
+        GUILayout.Label("SOM", sTitle);
+        volume = Slider("Volume geral", volume, 0f, 1f, "F2");
+        ApplyVolume();
+        GUILayout.Space(10);
         GUILayout.BeginHorizontal();
         if (GUILayout.Button("Padrão", GUILayout.Width(120)))
         {
             style = 0; color = 0; length = 9f; thickness = 1.5f; gap = 5f; opacity = 0.9f; dot = 2.5f;
-            outline = dynamic = hitmarker = true; sensitivity = 1f; fov = 78f;
+            outline = dynamic = hitmarker = true; sensitivity = 1f; fov = 78f; volume = 1f;
         }
         if (GUILayout.Button("Fechar (O)", GUILayout.Width(120))) ToggleMenu();
         GUILayout.EndHorizontal();

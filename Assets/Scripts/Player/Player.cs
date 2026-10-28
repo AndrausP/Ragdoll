@@ -34,6 +34,8 @@ public class Player : MonoBehaviour
     int burstLeft;
     AudioSource flameLoop;
     float ads, drawT = 1f, spreadNow;
+    float recoilYaw, windedT, breathT;
+    Vector3 vmPosVel, vmRotVel;
     Vector2 sway, swayVel;
     /// 0..1: quanto está mirando pela arma (botão direito)
     public float Ads => ads;
@@ -547,7 +549,7 @@ public class Player : MonoBehaviour
         {
             case "gun":
                 zoom = w.id == "sniper" && alt && reloadT < 0f;
-                ads = U.MoveToward(ads, w.id != "sniper" && (alt || forceAds) && reloadT < 0f && drawT >= 1f ? 1f : 0f, dt * 6f);
+                ads = U.MoveToward(ads, w.id != "sniper" && (alt || forceAds) && reloadT < 0f && drawT >= 1f ? 1f : 0f, dt / Mathf.Max(0.05f, WeaponFeels.Of(w.id).aimTime));
                 if (reloadT >= 0f) ReloadStep(w, dt);
                 else if (captured && InputX.Down(InputX.A.Reload) && ammo[w.id] < w.mag) StartReload(w);
                 else if (burstLeft > 0 && cooldown <= 0f && ammo[w.id] > 0)
@@ -661,7 +663,7 @@ public class Player : MonoBehaviour
         }
         if (w.type != "gun") ads = U.MoveToward(ads, 0f, dt * 6f);
         if (w.type != "flame") FlameSound(false);
-        cam.fieldOfView = Mathf.Lerp(cam.fieldOfView, zoom ? 20f : Crosshair.fov - ads * 16f, Mathf.Clamp01(dt * 14f));
+        cam.fieldOfView = Mathf.Lerp(cam.fieldOfView, zoom ? 20f : Crosshair.fov - ads * GameFeel.AdsFovDelta, Mathf.Clamp01(dt * 14f));
         vmRoot.gameObject.SetActive(!zoom);
         // mira dinâmica: abre andando, no ar e com o recuo; fecha mirando pela arma
         float mv = new Vector2(velocity.x, velocity.z).magnitude / SPRINT;
@@ -706,7 +708,9 @@ public class Player : MonoBehaviour
             Tracer(mz, end);
         }
         Game.sfx.PlayUI(w.sound, -4f, w.pitch * U.RandRange(0.93f, 1.07f));
-        recoil += w.recoil * (1f - ads * 0.35f);
+        var feel = WeaponFeels.Of(w.id);
+        recoil += w.recoil * feel.recoilPitch * (1f - ads * 0.35f);
+        recoilYaw += U.RandRange(-1f, 1f) * w.recoil * feel.recoilYaw * (1f - ads * 0.35f);
         EjectCasing(w);
         // fumaça leve no cano
         Fx.Burst(mz, 4, 0.9f, 0.6f, new Color(0.6f, 0.6f, 0.6f, 0.25f), new Color(0.7f, 0.7f, 0.7f, 0f), 0.06f, false, new Vector3(0, 0.6f, 0), fwd, 25f, 0.2f, 1.5f, 0.6f, 2f);
@@ -885,12 +889,19 @@ public class Player : MonoBehaviour
 
     void AnimateVm(float dt)
     {
-        recoil = U.MoveToward(recoil, 0f, dt * 0.6f);
+        var feel = WeaponFeels.Of(Weapon().id);
+        recoil = U.MoveToward(recoil, 0f, dt * 0.6f * feel.recovery);
+        recoilYaw = U.MoveToward(recoilYaw, 0f, dt * 0.6f * feel.recovery);
         vmKick = U.MoveToward(vmKick, 0f, dt * 9f);
         shake = U.MoveToward(shake, 0f, dt * 2.5f);
         flashT -= dt;
         var w = Weapon();
         float steady = 1f - ads * 0.85f;
+        bool isGun = w.type == "gun";
+        // fôlego: correr cansa e a respiração desloca a arma até recuperar
+        if (new Vector2(velocity.x, velocity.z).magnitude > WALK + 0.5f) windedT = 1f;
+        else windedT = Mathf.Max(0f, windedT - dt / GameFeel.SprintRecoverTime);
+        breathT += dt * Mathf.Lerp(1.6f, 3.2f, windedT);
         float b = Mathf.Sin(bob) * 0.012f * steady;
         var pos = new Vector3(b, Mathf.Abs(Mathf.Cos(bob)) * 0.01f * steady, vmKick * (0.06f - ads * 0.03f));
         var rot = new Vector3(vmKick * (0.12f - ads * 0.06f), 0, 0);
@@ -901,12 +912,13 @@ public class Player : MonoBehaviour
         sway += swayVel * dt;
         sway = Vector2.ClampMagnitude(sway, 0.12f);
         var localVel = Quaternion.Inverse(transform.rotation) * velocity;
-        rot += new Vector3(sway.y, sway.x, sway.x * 0.6f - localVel.x * 0.006f * steady);
+        rot += new Vector3(sway.y, sway.x, sway.x * 0.6f - localVel.x * 0.006f * steady) * (isGun ? feel.sway : 1f);
         pos += new Vector3(sway.x * 0.12f, -sway.y * 0.12f, 0);
+        pos.y += Mathf.Sin(breathT) * Mathf.Lerp(GameFeel.BreathRest, GameFeel.BreathWinded, windedT) * steady * feel.sway;
         // sacar: a arma sobe de baixo
         if (drawT < 1f)
         {
-            drawT = Mathf.Min(1f, drawT + dt / 0.32f);
+            drawT = Mathf.Min(1f, drawT + dt / Mathf.Max(0.1f, feel.raiseTime));
             float d = 1f - U.Smoothstep(0, 1, drawT);
             pos += new Vector3(0.04f * d, -0.28f * d, 0.05f * d);
             rot += new Vector3(0.7f * d, 0, -0.3f * d);
@@ -944,12 +956,13 @@ public class Player : MonoBehaviour
             if (bowParts.TryGetValue("pull", out var pull)) pull.localPosition = new Vector3(0, 0, 0.12f + bowDraw * 0.22f);
             pos += new Vector3(-0.05f * bowDraw, 0.02f * bowDraw, 0f);
         }
-        float k = Mathf.Clamp01(dt * 18f);
-        vmPos = Vector3.Lerp(vmPos, pos, k);
-        vmRot = Vector3.Lerp(vmRot, rot, k);
+        // a arma persegue a câmera com atraso proporcional à massa (mola amortecida)
+        float lagMul = isGun ? Mathf.Sqrt(feel.mass) : 0.7f;
+        vmPos = Vector3.SmoothDamp(vmPos, pos, ref vmPosVel, GameFeel.WeaponPositionLag * lagMul, float.PositiveInfinity, dt);
+        vmRot = Vector3.SmoothDamp(vmRot, rot, ref vmRotVel, GameFeel.WeaponRotationLag * lagMul, float.PositiveInfinity, dt);
         vmRoot.localPosition = vmPos;
         vmRoot.localRotation = U.Euler(vmRot);
-        camNode.localRotation = U.Euler(recoil + U.RandRange(-1, 1) * shake * 0.02f, U.RandRange(-1, 1) * shake * 0.02f, 0);
+        camNode.localRotation = U.Euler(recoil + U.RandRange(-1, 1) * shake * 0.02f, recoilYaw + U.RandRange(-1, 1) * shake * 0.02f, 0);
         var mz = muzzles[w.id];
         flashLight.intensity = flashT > 0f ? 5f : 0f;
         bool fv = flashT > 0f && w.type == "gun";

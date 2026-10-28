@@ -16,7 +16,7 @@ public static class Crosshair
     public static float length = 9f, thickness = 1.5f, gap = 5f, opacity = 0.9f, dot = 2.5f;
     public static bool outline = true, dynamic = true, hitmarker = true;
     public static float sensitivity = 1f, fov = 78f, volume = 1f;
-    public static bool bodyV2;     // corpo novo (male base mesh); vale ao reiniciar o jogo
+    public static bool bodyV2 = true;     // corpo novo v3 (padrão); vale ao reiniciar o jogo
     public static bool menuOpen;
 
     static bool loaded;
@@ -38,7 +38,7 @@ public static class Crosshair
         sensitivity = PlayerPrefs.GetFloat("sensibilidade", sensitivity);
         fov = PlayerPrefs.GetFloat("fov", fov);
         volume = Mathf.Clamp01(PlayerPrefs.GetFloat("volume", volume));
-        bodyV2 = PlayerPrefs.GetInt("corpo_v2", 0) == 1;
+        bodyV2 = PlayerPrefs.GetInt("corpo_v2", 1) == 1;
         ApplyVolume();
         style = Mathf.Clamp(style, 0, STYLES.Length - 1);
         color = Mathf.Clamp(color, 0, COLORS.Length - 1);
@@ -171,7 +171,7 @@ public static class Crosshair
         fov = Slider("Campo de visão", fov, 60f, 100f, "F0");
         GUILayout.Space(10);
         GUILayout.Label("CORPO", sTitle);
-        bodyV2 = Toggle("Modelo novo (vale ao reiniciar o jogo)", bodyV2);
+        bodyV2 = Toggle("Modelo novo v3 (vale ao reiniciar o jogo)", bodyV2);
         GUILayout.Space(10);
         GUILayout.Label("SOM", sTitle);
         volume = Slider("Volume geral", volume, 0f, 1f, "F2");

@@ -8,7 +8,8 @@ public static class ClothLayer
     public const float THICK = 0.006f;     // m acima da pele (aplicado no shader pelo _Push)
 
     // pele é bem mais vermelha que azul (mesmo critério do shader BG_Skin)
-    public static bool IsCloth(Color c) => c.r - c.b < 0.15f;
+    // alfa 1 (camisa) ou 0,5 (short); íris (0,25) e olho (0,9) nunca são roupa
+    public static bool IsCloth(Color c) => c.r - c.b < 0.15f && (c.a > 0.95f || (c.a > 0.4f && c.a < 0.6f));
 
     /// Devolve a malha da roupa (ou null se não houver) e pinta de pele os vértices de roupa em `body`.
     public static Mesh Extract(Mesh body)

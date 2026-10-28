@@ -99,3 +99,20 @@ partes arrancadas, torniquete 21,7 → 0,4 ml/s). Fuzil e escopeta diferem por d
 Não testado: partidas longas, os dois corpos misturados na mesma cena, escadas/bordas.
 `--phystest -nographics` imprime `InvalidOperationException: Instancing is not supported` do `BloodSystem` (não existe sem GPU;
 acontece igual no corpo antigo).
+
+## v3: variedade e pele (padrão desde esta versão)
+O v3 é a malha v2 mais aparência individual e material de pele novo. É o padrão; `--body=v1` volta ao corpo original.
+- `Appearance.cs`: cada boneco sorteia (pelo nome, sempre igual para o mesmo "Boneco #n") tom de pele (8 tons), camisa (10), short (6),
+  cabelo (6 cores + 12% carecas), cor da íris (5) e brilho da pele. É aplicado nas **cores de vértice** do corpo e das peças
+  separadas, então um membro arrancado mantém a pele e a roupa do dono.
+- Convenção do alfa nas cores de vértice do `human_v2.bytes`: 1,0 pele/camisa · 0,5 short · 0,25 íris · 0,9 olho. `ClothLayer.IsCloth`
+  e o shader respeitam isso (olho não vira roupa nem recebe trama de tecido). Regenere o `.bytes` com o conversor ao mudar a regra.
+- `BG_Skin.shader`: manchas de cor de baixa frequência na pele, brilho por boneco (`_Sheen`) e translucidez falsa nas bordas (`Emission`).
+- Testes desta versão (build Windows): `--phystest` 0 falhas nos dois corpos; `--stress` 32 FPS (antigo) contra 60 e 61 (novo);
+  `--autotest` completo, sem exceções, nos dois.
+
+### O que o v3 NÃO resolve (e é o que mais pesa em "parecer humano")
+- Movimento com peso: o boneco em pé ainda é pose procedural cinemática (sem active ragdoll, sem animação real).
+- Textura de pele fotográfica, rosto individual (a malha é a mesma para todos), barba, rugas, tatuagens.
+- Modelos de arma: blocos de poucos polígonos (Quaternius); a pegada foi corrigida mas não é desenhada arma a arma.
+- Os antebraços do viewmodel são finos e sem manga.

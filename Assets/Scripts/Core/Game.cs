@@ -40,7 +40,7 @@ public static class Game
             else if (a == "--body=v2") bodyV2 = true;
             else if (a == "--body=v1") bodyV2 = false;
         }
-        MeshStore.SelectBody(bodyV2 ?? PlayerPrefs.GetInt("corpo_v2", 0) == 1);
+        MeshStore.SelectBody(bodyV2 ?? PlayerPrefs.GetInt("corpo_v2", 1) == 1);
         // testes automáticos e capturas rodam sem som
         AudioListener.volume = autotest || physTest || stressTest || shotsDir != "" ? 0f : 1f;
         // matriz de colisão = máscaras do Godot

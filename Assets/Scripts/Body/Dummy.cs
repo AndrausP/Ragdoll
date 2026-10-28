@@ -43,10 +43,14 @@ public partial class Dummy : MonoBehaviour
 
     public Xf Root => new Xf(transform.rotation, transform.position);
 
+    /// Aparência individual (corpo v2/v3); nula no corpo original.
+    public Appearance look;
+
     public void Build()
     {
         var defs = Anatomy.Parts();
         var root = Root;
+        if (MeshStore.UseV2) look = Appearance.Roll(dummyName);
         foreach (var id in Anatomy.ORDER)
         {
             var d = defs[id];
@@ -116,6 +120,7 @@ public partial class Dummy : MonoBehaviour
             allBind.Add(Matrix4x4.Translate(-anchor));
         }
         var mesh = Object.Instantiate(sm.mesh);
+        if (look != null && sm.hasColors) mesh.colors = look.Recolor(mesh.colors);
         mesh.boneWeights = HelperWeights(mesh.boneWeights, defs);
         // posição/normal de repouso para o detalhe (tecido, poros) não escorregar com a deformação
         mesh.SetUVs(2, new List<Vector3>(sm.vertices));
@@ -147,6 +152,7 @@ public partial class Dummy : MonoBehaviour
         skinShader.SetColor("_SkinColor", DummyPart.SKIN);
         skinShader.SetColor("_BloodColor", DummyPart.BLOOD_DARK);
         skinShader.SetFloat("_UseVC", sm.hasColors ? 1 : 0);
+        if (look != null) skinShader.SetFloat("_Sheen", look.sheen);
         skinShader.SetFloatArray("_Blood", bloodLevels);
         skinShader.SetFloatArray("_Char", charLevels);
         var fabric = Resources.Load<Texture2D>("Textures/Fabric030_Color");

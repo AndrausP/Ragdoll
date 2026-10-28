@@ -14,6 +14,7 @@ Shader "BG/Skin"
         _Pores ("Poros (ruído)", 2D) = "gray" {}
         _Detail ("Usa detalhe", Float) = 0
         _Push ("Empurrar ao longo da normal (m) - camada de roupa", Float) = 0
+        _Sheen ("Brilho da pele (suor)", Float) = 0
     }
     SubShader
     {
@@ -23,11 +24,11 @@ Shader "BG/Skin"
         #pragma surface surf Standard fullforwardshadows vertex:vert addshadow
         #pragma target 3.5
         fixed4 _SkinColor, _BloodColor;
-        half _UseVC, _FabricScale, _Detail, _Push;
+        half _UseVC, _FabricScale, _Detail, _Push, _Sheen;
         sampler2D _Fabric, _Pores;
         float _Blood[17];
         float _Char[17];
-        struct Input { float4 vcol; float blood; float charred; float3 rest; float3 restN; };
+        struct Input { float4 vcol; float blood; float charred; float3 rest; float3 restN; float3 viewDir; float3 worldNormal; };
         void vert(inout appdata_full v, out Input o)
         {
             UNITY_INITIALIZE_OUTPUT(Input, o);
@@ -50,15 +51,24 @@ Shader "BG/Skin"
         {
             float3 col = IN.vcol.rgb;
             float rough = 0.6;
+            float skinMask = 0.0;
             if (_Detail > 0.5)
             {
                 // roupa x pele pela cor: pele é bem mais vermelha que azul
                 float cloth = saturate(1.0 - (IN.vcol.r - IN.vcol.b) * 5.0);
+                // alfa: 1 camisa/pele, 0,5 short; íris (0,25) e olho (0,9) não têm trama de tecido
+                float ca = IN.vcol.a;
+                cloth *= (ca > 0.95 || (ca > 0.4 && ca < 0.6)) ? 1.0 : 0.0;
                 float3 n = normalize(IN.restN + 1e-4);
                 float weave = dot(Tri(_Fabric, IN.rest, n, _FabricScale).rgb, float3(0.33, 0.33, 0.34));
                 float pore = Tri(_Pores, IN.rest, n, 40.0).r;
+                // manchas de cor de baixa frequência (rosto, juntas, vasos): mais vermelho/azulado em alguns pontos
+                float blotch = Tri(_Pores, IN.rest, n, 5.0).r;
+                float3 skinTone = col * lerp(float3(1.0, 1.0, 1.0), float3(1.08, 0.90, 0.88), saturate((blotch - 0.4) * 2.5) * 0.7);
+                col = lerp(skinTone, col, cloth);
                 col *= lerp(lerp(1.0, 0.82 + pore * 0.36, 0.6), 0.45 + weave * 1.1, cloth);
-                rough = lerp(0.55 + pore * 0.12, 0.9, cloth);
+                rough = lerp(0.55 + pore * 0.12 - _Sheen * 0.25, 0.9, cloth);
+                skinMask = 1.0 - cloth;
             }
             float b = saturate(IN.blood);
             float ch = saturate(IN.charred);
@@ -69,6 +79,9 @@ Shader "BG/Skin"
             o.Smoothness = lerp(lerp(1.0 - rough, 0.1, ch), 0.75, b);
             o.Metallic = 0;
             o.Alpha = 1;
+            // translucidez falsa: nas bordas a luz atravessa a pele e avermelha (orelhas, dedos, silhueta)
+            float rim = pow(1.0 - saturate(dot(normalize(IN.viewDir), normalize(IN.worldNormal))), 2.5);
+            o.Emission = skinMask * rim * float3(0.30, 0.07, 0.04) * 0.5 * (1.0 - b) * (1.0 - ch);
         }
         ENDCG
     }

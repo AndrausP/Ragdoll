@@ -98,6 +98,11 @@ public class DummyPart : MonoBehaviour
         {
             realModel = true;
             m = skin.mesh;
+            if (dummy.look != null && skin.hasColors)
+            {
+                m = Object.Instantiate(skin.mesh);         // cópia própria: cores deste boneco
+                m.colors = dummy.look.Recolor(m.colors);
+            }
             Mats.SetRough(skinMat, 0.6f);
             if (skin.hasColors)
             {
@@ -107,8 +112,8 @@ public class DummyPart : MonoBehaviour
                 Mats.SetColor(skinMat, Color.white);
             }
             var hm = MeshStore.Human("hair_" + partId);
-            if (hm != null)
-                hairMesh = Prims.Visual("hair", hm.mesh, Mats.Mat(new Color(0.1f, 0.07f, 0.05f), 0.9f), transform);
+            if (hm != null && !(dummy.look != null && dummy.look.bald))
+                hairMesh = Prims.Visual("hair", hm.mesh, Mats.Mat(dummy.look != null ? dummy.look.hair : new Color(0.1f, 0.07f, 0.05f), 0.9f), transform);
         }
         bodyMesh = Prims.Visual("body", m, skinMat, transform);
         if (partId == "head")

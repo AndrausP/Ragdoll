@@ -1,5 +1,7 @@
 # 01 — Movimento e comportamento
 
+Ver também o relato do levantar duro em [08-levantar-duro.md](08-levantar-duro.md).
+
 O sistema de levantar/rastejar/estancar é o anterior (`Dummy.Ground.cs`, `Dummy.Stand.cs`). Foi verificado só por capturas e
 métricas: 36 s com a coxa cortada, junta aberta máxima 1,7 cm, sem exceções. A fluidez **não** foi avaliada jogando.
 

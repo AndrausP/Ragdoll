@@ -27,6 +27,11 @@ public class DummyPart : MonoBehaviour
     public readonly List<Wound> wounds = new List<Wound>();
 
     public bool severed, cutHere, destroyed, tourniquet;
+    // corte em qualquer ponto (Dummy.Cut.cs): fragmento = pedaço distal com corpo próprio, mesmo referencial da parte de origem;
+    // meshDetached = a pele desta parte segue o próprio corpo (não colapsa no coto como no corte na junta)
+    public bool fragment, meshDetached, segInit;
+    public int boneIndex;
+    public float segLo, segHi;                  // extensão da peça ao longo do eixo do membro (espaço de repouso)
     public float bandage, pressure, bloodiness, limbBlood, drainBlood, impactGrace;
     public Vector3 lastVel;
     public Wound stumpParentWound;
@@ -52,6 +57,7 @@ public class DummyPart : MonoBehaviour
     public void Setup(Dummy d, string id, PartDef pd)
     {
         dummy = d; partId = id; def = pd; name = id;
+        boneIndex = Anatomy.OrderIndex(id);
         maxHp = pd.hp; hp = maxHp;
         gameObject.layer = Game.LAYER_DUMMY;
         rb = gameObject.AddComponent<Rigidbody>();

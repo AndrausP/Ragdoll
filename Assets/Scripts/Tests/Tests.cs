@@ -664,3 +664,70 @@ public class HazardTest : MonoBehaviour
         yield return null;
     }
 }
+
+/// Corte em qualquer ponto (--cuttest --shots-cut=<pasta>): corta coxa, antebraço e canela de bonecos parados e
+/// tira capturas antes e depois; registra o estado físico dos fragmentos.
+public class CutTest : MonoBehaviour
+{
+    IEnumerator Start()
+    {
+        yield return new WaitForSeconds(0.6f);
+        string dir = "";
+        foreach (var a in System.Environment.GetCommandLineArgs()) if (a.StartsWith("--shots-cut=")) dir = a.Substring(12);
+        Camera cam = null;
+        if (dir != "")
+        {
+            Directory.CreateDirectory(dir);
+            var go = new GameObject("cutcam"); cam = go.AddComponent<Camera>();
+            cam.fieldOfView = 45; cam.nearClipPlane = 0.03f; go.AddComponent<MirrorCamera>(); cam.depth = 10;
+        }
+        foreach (var d in Game.dummies) d.holdStill = true;
+        var cases = new[]
+        {
+            (name: "coxa",     dummy: 0, part: "thigh_l",   local: new Vector3(0f, 0.02f, 0f),  ragged: 0f),
+            (name: "antebraco", dummy: 1, part: "forearm_r", local: new Vector3(0f, 0.00f, 0f),  ragged: 0f),
+            (name: "canela",   dummy: 2, part: "shin_l",    local: new Vector3(0f, 0.06f, 0f),  ragged: 1f),
+        };
+        foreach (var cs in cases)
+        {
+            var d = Game.dummies[cs.dummy];
+            var pel = d.parts["pelvis"].transform.position + Vector3.up * 0.2f;
+            if (cam != null) yield return Snap(cam, pel, new Vector3(1.4f, 0.5f, 2.6f), dir, cs.name + "_0antes");
+            var p = d.parts[cs.part];
+            bool ok = d.CutAt(p, p.Xform.Apply(cs.local), Vector3.right, cs.ragged);
+            Debug.Log($"[corte] {cs.name}: ok={ok}");
+            yield return new WaitForSeconds(0.12f);
+            if (cam != null) yield return Snap(cam, d.parts["pelvis"].transform.position + Vector3.up * 0.2f, new Vector3(1.4f, 0.5f, 2.6f), dir, cs.name + "_1corte");
+            yield return new WaitForSeconds(1.4f);
+            if (cam != null) yield return Snap(cam, d.parts["pelvis"].transform.position, new Vector3(1.5f, 1.0f, 1.8f), dir, cs.name + "_2chao");
+            if (cam != null)
+            {
+                DummyPart fr = null;
+                foreach (var q in d.ValidParts()) if (q.fragment) fr = q;
+                if (fr != null)
+                {
+                    cam.fieldOfView = 30;
+                    var pc = p.Xform.Apply(fr.stumpLocal); var fc = fr.Xform.Apply(fr.stumpLocal);
+                    yield return Snap(cam, pc, new Vector3(0.35f, 0.45f, 0.55f), dir, cs.name + "_3cotoProx");
+                    yield return Snap(cam, fc, new Vector3(0.35f, 0.45f, 0.55f), dir, cs.name + "_4cotoDist");
+                    yield return Snap(cam, pc, new Vector3(-0.5f, 0.2f, 0.35f), dir, cs.name + "_5cotoProxB");
+                    cam.fieldOfView = 45;
+                }
+            }
+            yield return new WaitForSeconds(1.5f);
+            float vmax = 0f; int frags = 0;
+            foreach (var q in d.ValidParts()) { vmax = Mathf.Max(vmax, q.rb.linearVelocity.magnitude); if (q.fragment) frags++; }
+            Debug.Log($"[corte] {cs.name}: fragmentos={frags} vmax={vmax:F2} sangue={(int)d.blood} estado={d.StatusText()}");
+        }
+        Debug.Log("== CORTE fim");
+        Application.Quit();
+    }
+
+    static IEnumerator Snap(Camera cam, Vector3 center, Vector3 off, string dir, string name)
+    {
+        cam.transform.position = center + off; cam.transform.rotation = Quaternion.LookRotation(center - cam.transform.position);
+        yield return new WaitForEndOfFrame();
+        ScreenCapture.CaptureScreenshot(Path.Combine(dir, name + ".png"));
+        yield return null;
+    }
+}

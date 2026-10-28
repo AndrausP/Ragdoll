@@ -132,6 +132,8 @@ public partial class Dummy : MonoBehaviour
         mesh.bindposes = allBind.ToArray();
         // roupa como casca separada: precisa das cores originais, então sai antes de a pele ser repintada
         var clothMesh = sm.hasColors ? ClothLayer.Extract(mesh) : null;
+        skinBones = new List<Transform>(allBones);
+        skinBind = new List<Matrix4x4>(allBind);
         skinBody = go.AddComponent<SkinnedMeshRenderer>();
         skinBody.sharedMesh = mesh;
         skinBody.bones = allBones.ToArray();
@@ -268,7 +270,7 @@ public partial class Dummy : MonoBehaviour
             var p = kv.Value;
             if (!p || !boneProxy.TryGetValue(kv.Key, out var bt)) continue;
             Xf xf;
-            if (!p.severed)
+            if (!p.severed || p.meshDetached)
                 xf = inv * p.Xform;     // osso = transformação da parte (a posição de repouso já está no bindpose)
             else
             {
@@ -286,13 +288,20 @@ public partial class Dummy : MonoBehaviour
             bt.localRotation = xf.q;
             bt.localScale = Vector3.one * xf.s;
         }
+        // fragmentos de corte: o osso extra segue o corpo do fragmento
+        foreach (var kv in fragBone)
+        {
+            if (!kv.Key) continue;
+            var fx = inv * kv.Key.Xform;
+            kv.Value.localPosition = fx.p; kv.Value.localRotation = fx.q; kv.Value.localScale = Vector3.one * fx.s;
+        }
         // auxiliares: na junta, metade da rotação entre pai e filho (filho separado: segue o pai)
         foreach (var kv in helperBones)
         {
             if (!parts.TryGetValue(kv.Key, out var c) || !c) continue;
             var par = c.parentPart;
             if (par == null || !par) continue;
-            if (par.severed && boneProxy.TryGetValue(par.partId, out var pb))
+            if (par.severed && !par.meshDetached && boneProxy.TryGetValue(par.partId, out var pb))
             {
                 // pai separado: imita o osso (colapsado) do pai — bind do auxiliar é T(-âncora), o do pai T(-pos)
                 kv.Value.localRotation = pb.localRotation;
@@ -302,7 +311,7 @@ public partial class Dummy : MonoBehaviour
             }
             var px = inv * par.Xform;
             var anchor = c.def.joint.anchor;
-            var q = c.severed ? px.q : Quaternion.Slerp(px.q, (inv * c.Xform).q, 0.5f);
+            var q = c.severed && !c.meshDetached ? px.q : Quaternion.Slerp(px.q, (inv * c.Xform).q, 0.5f);
             kv.Value.localPosition = px.Apply(anchor - par.def.pos);
             kv.Value.localRotation = q;
             kv.Value.localScale = Vector3.one;
@@ -313,7 +322,9 @@ public partial class Dummy : MonoBehaviour
 
     // ------------------------------------------------------------------ juntas
 
-    void MakeJoint(DummyPart p)
+    /// hingeShiftDeg: a junta criada com o corpo já dobrado trata a pose atual como zero; o deslocamento devolve os limites
+    /// da dobradiça ao intervalo anatômico (usado ao religar uma parte a um fragmento de corte).
+    void MakeJoint(DummyPart p, float hingeShiftDeg = 0f)
     {
         var jd = p.def.joint;
         var j = p.gameObject.AddComponent<ConfigurableJoint>();
@@ -335,8 +346,8 @@ public partial class Dummy : MonoBehaviour
             j.angularXMotion = ConfigurableJointMotion.Limited;
             j.angularYMotion = ConfigurableJointMotion.Locked;
             j.angularZMotion = ConfigurableJointMotion.Locked;
-            j.lowAngularXLimit = new SoftJointLimit { limit = Mathf.Clamp(lo * Mathf.Rad2Deg, -177f, 177f) };
-            j.highAngularXLimit = new SoftJointLimit { limit = Mathf.Clamp(hi * Mathf.Rad2Deg, -177f, 177f) };
+            j.lowAngularXLimit = new SoftJointLimit { limit = Mathf.Clamp(lo * Mathf.Rad2Deg + hingeShiftDeg, -177f, 177f) };
+            j.highAngularXLimit = new SoftJointLimit { limit = Mathf.Clamp(hi * Mathf.Rad2Deg + hingeShiftDeg, -177f, 177f) };
         }
         else
         {

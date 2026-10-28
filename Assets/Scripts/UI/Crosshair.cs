@@ -47,7 +47,7 @@ public static class Crosshair
     /// Volume geral; os modos de teste automático continuam mudos.
     public static void ApplyVolume()
     {
-        if (!(Game.autotest || Game.physTest || Game.stressTest || Game.agonyTest || Game.gaitTest || Game.hazardTest || Game.shotsDir != "")) AudioListener.volume = volume;
+        if (!(Game.autotest || Game.physTest || Game.stressTest || Game.agonyTest || Game.gaitTest || Game.hazardTest || Game.cutTest || Game.shotsDir != "")) AudioListener.volume = volume;
     }
 
     public static void Save()

@@ -29,3 +29,6 @@ setup.log
 # python
 __pycache__/
 *.pyc
+
+# capturas dos testes
+shots_*/

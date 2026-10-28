@@ -1,5 +1,7 @@
 # Pendências
 
+> Plano de soluções pesquisadas para fechar tudo isto: [`docs/plano-pesquisa-solucoes.md`](../docs/plano-pesquisa-solucoes.md).
+
 O que ainda falta no projeto (branch `corpo-procedural`). Cada arquivo tem um tema; marque `[x]` quando fechar.
 
 | Arquivo | Tema | Prioridade |

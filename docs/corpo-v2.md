@@ -65,6 +65,7 @@ uma casca de tecido (`ClothLayer`), empurrada pelo shader (`_Push`) ao longo da 
 - A pele estourava na roupa com os braços levantados; resolvido empurrando a casca no shader, não na malha.
 - Vértices dominados pelo abdômen abaixo da barra da camisa ficavam sem cor de roupa (mancha de pele na cintura); corrigido.
 - O modelo tem lado esquerdo em +X, igual ao projeto. O modelo `torso-with-removable-organs.glb` tem o lado esquerdo em **−X**.
+- **Viewmodel (mãos em primeira pessoa)**: o `VmArms` recorta o braço da pele e fecha os dedos com um blend shape calculado para a mão do corpo antigo (palma para a frente, nós dos dedos a 1,2 cm do centro da mão). Com o corpo novo isso gerava dedos em espiral. Corrigido: o antebraço é supinado na montagem (palma para +z), `KNUCKLE_Y` = -0,026 e `GRIP_R` = 0,022 para o corpo v2, faixa do polegar deslocada. Os valores vieram de uma rodada de capturas, não de um ajuste fino por arma.
 - Cabelo antigo foi reaproveitado (encaixa, mas é o do corpo antigo).
 - Olhos ainda parecem grandes demais de perto.
 

@@ -6,7 +6,10 @@ using UnityEngine;
 /// grip_hand() do tools/build_human.py, aplicada na malha densa do corpo).
 public static class VmArms
 {
-    public const float GRIP_R = 0.021f, KNUCKLE_Y = -0.012f;
+    // O corpo original tem a palma voltada para a frente e os nós dos dedos a 1,2 cm abaixo do centro da mão; o corpo v2
+    // (male base mesh) tem a palma de lado e os dedos mais longos (nós a 2,6 cm). Ver docs/corpo-v2.md.
+    public static float GRIP_R => MeshStore.UseV2 ? 0.022f : 0.021f;
+    public static float KNUCKLE_Y => MeshStore.UseV2 ? -0.026f : -0.012f;
 
     public class ArmMesh
     {
@@ -62,6 +65,20 @@ public static class VmArms
         // blend shape "punho" no espaço local da mão (Godot: y para cima, palma em +z)
         var hPos = defs[parts[2]].pos;
         float sgn = side == "l" ? 1f : -1f;
+        // corpo v2: gira o antebraço (supinação) até a palma ficar voltada para +z, como o blend shape espera
+        if (MeshStore.UseV2)
+        {
+            var elb = defs[parts[1]].joint.anchor; var wr = defs[parts[2]].joint.anchor;
+            var axis = (wr - elb).normalized; float len = (wr - elb).magnitude;
+            for (int i = 0; i < verts.Count; i++)
+            {
+                float t = Mathf.Clamp01(Vector3.Dot(verts[i] - elb, axis) / len);
+                var rot = Quaternion.AngleAxis(-sgn * 90f * Mathf.SmoothStep(0f, 1f, t), axis);
+                verts[i] = elb + rot * (verts[i] - elb);
+                nrm[i] = rot * nrm[i];
+            }
+        }
+        float yoff = MeshStore.UseV2 ? 0.014f : 0f;     // faixa do polegar acompanha a posição dos nós dos dedos
         int n = verts.Count;
         var P = new Vector3[n];
         var wt = new float[n];
@@ -72,7 +89,7 @@ public static class VmArms
             if (handW < 0.5f) { wt[i] = -1f; continue; }      // só a mão
             var p = P[i];
             // polegar: lado de fora da mão, acima da ponta dos dedos, abaixo do punho
-            wt[i] = Mathf.Clamp01((p.x * sgn - 0.008f) / 0.014f) * Mathf.Clamp01((p.y + 0.07f) / 0.02f) * Mathf.Clamp01((0.045f - p.y) / 0.025f);
+            wt[i] = Mathf.Clamp01((p.x * sgn - 0.008f) / 0.014f) * Mathf.Clamp01((p.y + yoff + 0.07f) / 0.02f) * Mathf.Clamp01((0.045f - p.y - yoff) / 0.025f);
         }
         var zs = new List<float>(); var xs = new List<float>();
         for (int i = 0; i < n; i++)

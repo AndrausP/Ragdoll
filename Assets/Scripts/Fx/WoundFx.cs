@@ -12,6 +12,7 @@ public static class WoundFx
 
     // ---- malha do corpo em repouso, triângulos agrupados por parte
     static Vector3[] bodyV, bodyN;
+    static bool[] bodyCloth;
     static Dictionary<int, int[]> trisByPart;
 
     static bool LoadBody()
@@ -22,6 +23,10 @@ public static class WoundFx
         if (sm == null || !sm.skinned) return false;
         bodyV = sm.vertices;
         bodyN = sm.mesh.normals;
+        var cols0 = sm.mesh.colors;
+        bodyCloth = new bool[bodyV.Length];
+        if (cols0 != null && cols0.Length == bodyV.Length)
+            for (int i = 0; i < cols0.Length; i++) bodyCloth[i] = ClothLayer.IsCloth(cols0[i]);
         var uv2 = sm.mesh.uv2;
         var t = sm.triangles;
         var lists = new Dictionary<int, List<int>>();
@@ -77,7 +82,7 @@ public static class WoundFx
                     map[vi] = ni;
                     var p = bodyV[vi] - pos0;
                     var d = p - c;
-                    verts.Add(p + bodyN[vi] * lift);
+                    verts.Add(p + bodyN[vi] * (lift + (bodyCloth[vi] ? ClothLayer.THICK : 0f)));
                     nrm.Add(bodyN[vi]);
                     uv.Add(new Vector2(Vector3.Dot(d, t) / half.x * 0.5f + 0.5f + uvOff.x, Vector3.Dot(d, b) / half.y * 0.5f + 0.5f + uvOff.y));
                 }

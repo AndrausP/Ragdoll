@@ -13,7 +13,7 @@ public partial class Dummy : MonoBehaviour
     public static float HingeSign = -1f;
 
     public readonly Dictionary<string, DummyPart> parts = new Dictionary<string, DummyPart>();
-    SkinnedMeshRenderer skinBody;
+    SkinnedMeshRenderer skinBody, skinCloth;
     Material skinShader, skinXray;
     readonly float[] bloodLevels = new float[17];
     readonly Dictionary<string, Transform> boneProxy = new Dictionary<string, Transform>();
@@ -121,12 +121,25 @@ public partial class Dummy : MonoBehaviour
         mesh.SetUVs(2, new List<Vector3>(sm.vertices));
         mesh.SetUVs(3, new List<Vector3>(sm.mesh.normals));
         mesh.bindposes = allBind.ToArray();
+        // roupa como casca separada: precisa das cores originais, então sai antes de a pele ser repintada
+        var clothMesh = sm.hasColors ? ClothLayer.Extract(mesh, DummyPart.SKIN) : null;
         skinBody = go.AddComponent<SkinnedMeshRenderer>();
         skinBody.sharedMesh = mesh;
         skinBody.bones = allBones.ToArray();
         skinBody.rootBone = transform;
         skinBody.updateWhenOffscreen = true;
         skinBody.quality = SkinQuality.Bone4;
+        if (clothMesh != null)
+        {
+            var cgo = new GameObject("roupa");
+            cgo.transform.SetParent(transform, false);
+            skinCloth = cgo.AddComponent<SkinnedMeshRenderer>();
+            skinCloth.sharedMesh = clothMesh;
+            skinCloth.bones = allBones.ToArray();
+            skinCloth.rootBone = transform;
+            skinCloth.updateWhenOffscreen = true;
+            skinCloth.quality = SkinQuality.Bone4;
+        }
         skinShader = new Material(Mats.Skin);
         skinShader.SetColor("_SkinColor", DummyPart.SKIN);
         skinShader.SetColor("_BloodColor", DummyPart.BLOOD_DARK);
@@ -142,6 +155,7 @@ public partial class Dummy : MonoBehaviour
         }
         skinXray = Mats.FadeMat(new Color(DummyPart.SKIN.r, DummyPart.SKIN.g, DummyPart.SKIN.b, 0.22f), 0.6f);
         skinBody.sharedMaterial = skinShader;
+        if (skinCloth) skinCloth.sharedMaterial = skinShader;
         foreach (var p in parts.Values) p.bodyMesh.SetActive(false);
         UpdateSkin();
     }
@@ -359,6 +373,7 @@ public partial class Dummy : MonoBehaviour
     {
         foreach (var p in ValidParts()) p.SetXray(on);
         if (skinBody) skinBody.sharedMaterial = on ? skinXray : skinShader;
+        if (skinCloth) skinCloth.enabled = !on;
     }
 
     // ------------------------------------------------------------------ laço

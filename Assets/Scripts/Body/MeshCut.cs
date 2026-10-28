@@ -54,6 +54,14 @@ public class MeshData
         m.RecalculateBounds();
     }
 
+    /// Só posições, normais e cores (sem mexer na topologia): barato, para amassados.
+    public void ApplyVerts(Mesh m)
+    {
+        m.SetVertices(v);
+        m.SetNormals(n);
+        if (hasColors) m.SetColors(c);
+    }
+
     public int AddCopy(int i)
     {
         v.Add(v[i]); n.Add(n[i]);
@@ -88,6 +96,7 @@ public class CutOptions
     public Color coreColor = new Color(0.30f, 0.02f, 0.03f, 1f);
     public Color boneColor = new Color(0.90f, 0.86f, 0.74f, 1f);
     public float boneRadius = 0.018f;
+    public float irregular = 0.6f;                // 0 = tampa lisa, 1 = carne bem irregular
     public int[] proxMap, distMap;                // por índice de osso: substituto para vértices do lado proximal / distal (-1 = mantém)
 }
 
@@ -182,7 +191,7 @@ public static class MeshCut
         return info;
     }
 
-    static void AddCap(MeshData d, List<int> tris, List<int> boundary, List<bool> side, bool distSide, CutOptions o, ref CutInfo info)
+    public static void AddCap(MeshData d, List<int> tris, List<int> boundary, List<bool> side, bool distSide, CutOptions o, ref CutInfo info)
     {
         if (boundary.Count == 0) return;
         // componentes conexas das bordas (um laço por membro cortado)
@@ -232,9 +241,9 @@ public static class MeshCut
             // anéis: carne -> carne escura -> osso -> centro afundado
             var inward = -nrm;
             var rings = new List<Dictionary<int, int>> { rim };
-            float[] scale = { 0.78f, 0.45f };
-            float[] depth = { 0.35f, 0.8f };
-            Color[] col = { o.rimColor, o.coreColor };
+            float[] scale = { 0.80f, 0.52f, 0.25f };
+            float[] depth = { 0.40f, 0.90f, 0.55f };
+            Color[] col = { o.rimColor, o.coreColor, o.boneColor };
             for (int ri = 0; ri < scale.Length; ri++)
             {
                 var ring = new Dictionary<int, int>();
@@ -242,7 +251,10 @@ public static class MeshCut
                 {
                     int ci = d.AddCopy(vi);
                     side.Add(distSide);
-                    d.v[ci] = cen + (d.v[vi] - cen) * scale[ri] + inward * (o.capDepth * depth[ri]);
+                    // irregularidade da carne dilacerada (determinística pela posição)
+                    float hz = Mathf.Abs(Mathf.Sin(d.v[vi].x * 913f + d.v[vi].y * 517f + d.v[vi].z * 311f + ri * 7f));
+                    float rj = 1f + (hz - 0.5f) * 0.22f * o.irregular, dj = 1f + (hz - 0.5f) * 0.8f * o.irregular;
+                    d.v[ci] = cen + (d.v[vi] - cen) * (scale[ri] * rj) + inward * (o.capDepth * depth[ri] * dj);
                     d.n[ci] = nrm;
                     if (d.hasColors) d.c[ci] = col[ri];
                     if (d.hasRest) { d.rest[ci] = d.v[ci]; d.restN[ci] = nrm; }
@@ -254,7 +266,7 @@ public static class MeshCut
             int first = -1; foreach (int vi in verts) { first = vi; break; }
             int center = d.AddCopy(first);
             side.Add(distSide);
-            d.v[center] = cen + inward * o.capDepth;
+            d.v[center] = cen + inward * (o.capDepth * 0.15f);
             d.n[center] = nrm;
             if (d.hasColors) d.c[center] = o.boneColor;
             if (d.hasRest) { d.rest[center] = d.v[center]; d.restN[center] = nrm; }
@@ -276,6 +288,51 @@ public static class MeshCut
             // a borda original da malha (sem a tampa) tem de soldar com o primeiro anel: as cópias `rim` têm posição
             // igual à da borda, então não há fresta.
         }
+    }
+
+    static long PosKey(Vector3 q) =>
+        ((long)Mathf.RoundToInt(q.x * 5000f) * 73856093L) ^ ((long)Mathf.RoundToInt(q.y * 5000f) * 19349663L) ^ ((long)Mathf.RoundToInt(q.z * 5000f) * 83492791L);
+
+    /// Fura a malha em volta de `center` (faces do lado de `n`, até `radius`); com `cap`, fecha o buraco com um funil de carne.
+    public static bool Crater(MeshData d, Vector3 center, Vector3 n, float radius, CutOptions o, bool cap)
+    {
+        var tr = d.tris; int nt = tr.Count / 3;
+        var remove = new bool[nt]; int any = 0;
+        for (int t = 0; t < nt; t++)
+        {
+            Vector3 a = d.v[tr[t * 3]], b = d.v[tr[t * 3 + 1]], c = d.v[tr[t * 3 + 2]];
+            if (((a + b + c) / 3f - center).sqrMagnitude > radius * radius) continue;
+            if (Vector3.Dot(Vector3.Cross(b - a, c - a).normalized, n) < 0.2f) continue;
+            remove[t] = true; any++;
+        }
+        if (any == 0) return false;
+        var removedEdges = new HashSet<(long, long)>();
+        for (int t = 0; t < nt; t++)
+        {
+            if (!remove[t]) continue;
+            for (int e = 0; e < 3; e++)
+                removedEdges.Add((PosKey(d.v[tr[t * 3 + e]]), PosKey(d.v[tr[t * 3 + (e + 1) % 3]])));
+        }
+        var kept = new List<int>(tr.Count);
+        var boundary = new List<int>();
+        for (int t = 0; t < nt; t++)
+        {
+            if (remove[t]) continue;
+            for (int e = 0; e < 3; e++)
+            {
+                int a = tr[t * 3 + e], b = tr[t * 3 + (e + 1) % 3];
+                kept.Add(a);
+                if (removedEdges.Contains((PosKey(d.v[b]), PosKey(d.v[a])))) { boundary.Add(a); boundary.Add(b); }
+            }
+        }
+        if (cap && boundary.Count > 0)
+        {
+            var info = new CutInfo();
+            o.capNormal = n;
+            AddCap(d, kept, boundary, new List<bool>(), false, o, ref info);
+        }
+        d.tris.Clear(); d.tris.AddRange(kept);
+        return true;
     }
 
     static BoneWeight Remap(BoneWeight w, int[] map)

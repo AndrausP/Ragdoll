@@ -731,3 +731,105 @@ public class CutTest : MonoBehaviour
         yield return null;
     }
 }
+
+/// Ferimentos de verdade (--woundtest --shots-wound=<pasta>): tiros no peito (amassado, saída, buraco), foice na canela,
+/// machado no antebraço e marreta na coxa, com capturas de perto e do corpo inteiro.
+public class WoundTest : MonoBehaviour
+{
+    IEnumerator Start()
+    {
+        yield return new WaitForSeconds(0.6f);
+        string dir = "";
+        foreach (var a in System.Environment.GetCommandLineArgs()) if (a.StartsWith("--shots-wound=")) dir = a.Substring(14);
+        Camera cam = null;
+        if (dir != "")
+        {
+            Directory.CreateDirectory(dir);
+            var go = new GameObject("woundcam"); cam = go.AddComponent<Camera>();
+            cam.fieldOfView = 40; cam.nearClipPlane = 0.03f; go.AddComponent<MirrorCamera>(); cam.depth = 10;
+        }
+        foreach (var d in Game.dummies) d.holdStill = true;
+
+        if (cam != null)
+            for (int k = 0; k < 3; k++)
+                yield return Snap(cam, Game.dummies[k].parts["head"].transform.position + new Vector3(0f, -0.01f, 0f), new Vector3(0f, 0.02f, 0.62f), dir, "rosto_" + k, 24f);
+        // ---- boneco 0: tiros no peito
+        var d0 = Game.dummies[0];
+        var ch = d0.parts["chest"];
+        if (cam != null) yield return Snap(cam, ch.transform.position, new Vector3(0.5f, 0.1f, 1.1f), dir, "peito_0antes", 30f);
+        var pistol = Weapons.ById("pistol");
+        foreach (var off in new[] { new Vector3(0.04f, 0.05f, 0.11f), new Vector3(-0.05f, -0.02f, 0.11f), new Vector3(0.0f, 0.08f, 0.11f) })
+        {
+            var tgt = ch.Xform.Apply(off); var from = tgt + new Vector3(0, 0.1f, 2.5f);
+            Weapons.FireRay(from, (tgt - from).normalized, pistol.energy, pistol.prof, null);
+            yield return new WaitForSeconds(0.08f);
+        }
+        yield return new WaitForSeconds(0.05f);
+        if (cam != null) yield return Snap(cam, ch.transform.position, new Vector3(0.5f, 0.1f, 1.1f), dir, "peito_1pistola", 30f);
+        {
+            var tgt = ch.Xform.Apply(new Vector3(-0.08f, -0.05f, 0.11f)); var from = tgt + new Vector3(0, 0.0f, 2.5f);
+            Weapons.FireRay(from, (tgt - from).normalized, 900f, Weapons.P_SNIPER, null);
+        }
+        yield return new WaitForSeconds(0.05f);
+        if (cam != null) yield return Snap(cam, ch.transform.position, new Vector3(0.5f, 0.1f, 1.1f), dir, "peito_2sniper", 30f);
+        if (cam != null) yield return Snap(cam, ch.transform.position, new Vector3(-0.6f, 0.1f, -1.1f), dir, "peito_3costas", 30f);
+
+        // ---- boneco 0 (continua): tiros na perna, sangue deve escorrer em filete (não tingir a canela toda)
+        {
+            var sh0 = d0.parts["shin_r"];
+            foreach (var off in new[] { new Vector3(0.0f, 0.06f, 0.06f), new Vector3(0.01f, -0.02f, 0.06f) })
+            {
+                var tgt = sh0.Xform.Apply(off); var from = tgt + new Vector3(0, 0.05f, 2.5f);
+                Weapons.FireRay(from, (tgt - from).normalized, pistol.energy, pistol.prof, null);
+                yield return new WaitForSeconds(0.1f);
+            }
+            if (d0.state == Dummy.State.STANDING) d0.Collapse();
+            yield return new WaitForSeconds(0.2f);
+            if (cam != null) yield return Snap(cam, sh0.transform.position, new Vector3(0.7f, 0.5f, 1.0f), dir, "perna_0", 35f);
+            yield return new WaitForSeconds(3f);
+            if (cam != null) yield return Snap(cam, sh0.transform.position, new Vector3(0.7f, 0.5f, 1.0f), dir, "perna_1", 35f);
+            yield return new WaitForSeconds(4f);
+            if (cam != null) yield return Snap(cam, sh0.transform.position, new Vector3(0.7f, 0.5f, 1.0f), dir, "perna_2", 35f);
+        }
+        // ---- boneco 1: foice na canela até cortar
+        var d1 = Game.dummies[1];
+        var sh = d1.parts["shin_l"];
+        int swings = 0;
+        for (; swings < 8; swings++)
+        {
+            bool done = false; foreach (var q in d1.ValidParts()) if (q.fragment) done = true;
+            if (done) break;
+            var at = sh.Xform.Apply(new Vector3(0f, 0.04f, 0.04f));
+            d1.ApplyPenetration(sh, at, new Vector3(-1f, 0f, 0f), 380f, Weapons.P_SCYTHE, Vector3.forward);
+            yield return new WaitForSeconds(0.05f);
+        }
+        Debug.Log($"[ferida] foice na canela: golpes={swings} {d1.StatusText()}");
+        yield return new WaitForSeconds(1.8f);
+        if (cam != null) yield return Snap(cam, d1.parts["pelvis"].transform.position, new Vector3(1.5f, 0.9f, 1.8f), dir, "foice_canela", 45f);
+
+        // ---- boneco 2: machado no antebraço e marreta na coxa
+        var d2 = Game.dummies[2];
+        var fa = d2.parts["forearm_l"]; var th = d2.parts["thigh_r"];
+        for (int i = 0; i < 6; i++)
+        {
+            bool done = false; foreach (var q in d2.ValidParts()) if (q.fragment) done = true;
+            if (done) break;
+            d2.ApplyPenetration(fa, fa.Xform.Apply(new Vector3(0f, 0.03f, 0.04f)), new Vector3(1f, 0f, 0f), 320f, Weapons.P_AXE, Vector3.forward);
+            yield return new WaitForSeconds(0.05f);
+        }
+        d2.ApplyPenetration(th, th.Xform.Apply(new Vector3(0f, 0.05f, 0.07f)), new Vector3(0f, 0f, -1f), 360f, Weapons.P_HAMMER, Vector3.forward);
+        yield return new WaitForSeconds(1.6f);
+        if (cam != null) yield return Snap(cam, d2.parts["pelvis"].transform.position, new Vector3(1.5f, 0.9f, 1.8f), dir, "machado_antebraco", 45f);
+        Debug.Log("== FERIDAS fim");
+        Application.Quit();
+    }
+
+    static IEnumerator Snap(Camera cam, Vector3 center, Vector3 off, string dir, string name, float fov)
+    {
+        cam.fieldOfView = fov;
+        cam.transform.position = center + off; cam.transform.rotation = Quaternion.LookRotation(center - cam.transform.position);
+        yield return new WaitForEndOfFrame();
+        ScreenCapture.CaptureScreenshot(Path.Combine(dir, name + ".png"));
+        yield return null;
+    }
+}

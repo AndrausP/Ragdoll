@@ -30,6 +30,38 @@ public partial class Dummy
     public bool Cuttable(DummyPart p) =>
         skinBody != null && p != null && !p.destroyed && p.def.joint != null && p.def.severable && p.def.shape != "sphere";
 
+    /// Ponta distal (mundo) de uma peça cortável; usada para cortar o pulso/tornozelo/pescoço quando a mão/pé/cabeça é arrancada.
+    Vector3 DistalTip(DummyPart p, float back)
+    {
+        var axis = LimbAxis(p.def);
+        float half = (p.def.shape == "capsule" ? p.def.len : Vector3.Dot(p.def.size, new Vector3(Mathf.Abs(axis.x), Mathf.Abs(axis.y), Mathf.Abs(axis.z)))) * 0.5f;
+        float aC = Vector3.Dot(p.def.pos, axis);
+        float hi = p.segInit ? p.segHi : aC + half;
+        return p.Xform.Apply(axis * (hi - back - aC));
+    }
+
+    /// Amputação pelo golpe: corta onde bateu (membros), no pulso/tornozelo (mão/pé) ou no pescoço (cabeça).
+    bool TryMeshCut(DummyPart p, Vector3 dirW)
+    {
+        if (skinBody == null || p.cutHere || p.destroyed) return false;
+        if (p.meshDetached) return true;                // pedaço já solto: não há o que amputar de novo
+        var target = p;
+        Vector3 pt = cutHint ?? p.transform.position;
+        if (p.partId == "head")
+        {
+            if (!parts.TryGetValue("neck", out var neck) || !neck || neck.severed) return false;
+            target = neck; pt = DistalTip(neck, 0.035f);
+        }
+        else if (p.def.leaf && p.parentPart != null && !p.parentPart.severed)
+        {
+            target = p.parentPart; pt = DistalTip(target, 0.02f);
+        }
+        if (!Cuttable(target) || target.cutHere) return false;
+        bool ok = CutAt(target, pt, dirW, cutRagged);
+        cutHint = null;
+        return ok;
+    }
+
     static float[] CutField(MeshData d, HashSet<int> region, Vector3 axis, float s, float ragged, Vector3 center, float seed)
     {
         var f = new float[d.Count];
@@ -105,11 +137,7 @@ public partial class Dummy
         var centerRest = def.pos + axis * (s - aC);
 
         // ---- pele e roupa
-        if (bodyData == null)
-        {
-            bodyData = MeshData.From(skinBody.sharedMesh);
-            if (skinCloth) clothData = MeshData.From(skinCloth.sharedMesh);
-        }
+        EnsureData();
         var chain = Chain(p);
         var region = new HashSet<int>();
         foreach (var c in chain)
@@ -146,6 +174,7 @@ public partial class Dummy
         var bind = skinBind.ToArray();
         bodyData.Apply(skinBody.sharedMesh, bind);
         if (clothData != null) clothData.Apply(skinCloth.sharedMesh, bind);
+        meshVertsDirty = meshTopoDirty = false;
         skinBody.bones = skinBones.ToArray();
         if (skinCloth) skinCloth.bones = skinBones.ToArray();
 

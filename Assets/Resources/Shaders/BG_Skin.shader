@@ -15,6 +15,7 @@ Shader "BG/Skin"
         _Detail ("Usa detalhe", Float) = 0
         _Push ("Empurrar ao longo da normal (m) - camada de roupa", Float) = 0
         _Sheen ("Brilho da pele (suor)", Float) = 0
+        _HairColor ("Cor do cabelo/sobrancelha", Color) = (0.08, 0.05, 0.03, 1)
     }
     SubShader
     {
@@ -23,7 +24,7 @@ Shader "BG/Skin"
         CGPROGRAM
         #pragma surface surf Standard fullforwardshadows vertex:vert addshadow
         #pragma target 3.5
-        fixed4 _SkinColor, _BloodColor;
+        fixed4 _SkinColor, _BloodColor, _HairColor;
         half _UseVC, _FabricScale, _Detail, _Push, _Sheen;
         sampler2D _Fabric, _Pores;
         float _Blood[17];
@@ -69,6 +70,34 @@ Shader "BG/Skin"
                 col *= lerp(lerp(1.0, 0.82 + pore * 0.36, 0.6), 0.45 + weave * 1.1, cloth);
                 rough = lerp(0.55 + pore * 0.12 - _Sheen * 0.25, 0.9, cloth);
                 skinMask = 1.0 - cloth;
+                // ---- rosto procedural (posição de repouso: nariz em (0, 1.563, 0.143), olhos em y ~1.604)
+                float3 fr = IN.rest;
+                if (cloth < 0.5 && abs(fr.x) < 0.1 && fr.y > 1.49 && fr.y < 1.68 && fr.z > 0.06 && IN.restN.z > 0.1)
+                {
+                    float ax = abs(fr.x), y = fr.y;
+                    // sobrancelha: faixa arqueada que afina para fora, com fios
+                    float yb = 1.619 + 0.006 * saturate(1.0 - abs(ax - 0.034) / 0.024) - 0.004 * saturate((ax - 0.042) / 0.02);
+                    float tb = 0.0050 - 0.0020 * saturate((ax - 0.028) / 0.034);
+                    float mb = smoothstep(tb, tb * 0.35, abs(y - yb)) * smoothstep(0.006, 0.014, ax) * (1.0 - smoothstep(0.052, 0.064, ax));
+                    float strand = 0.6 + 0.4 * tex2D(_Pores, fr.xy * float2(260.0, 520.0)).r;
+                    col = lerp(col, _HairColor.rgb * 0.85, saturate(mb * strand * 1.1));
+                    // olheiras e prega da pálpebra
+                    float2 e = float2((ax - 0.031) / 0.036, (y - 1.601) / 0.024);
+                    col *= lerp(1.0, float3(0.82, 0.68, 0.70), saturate(1.15 - length(e)) * 0.55);
+                    float crease = exp(-pow((y - 1.6115) / 0.0013, 2.0)) * smoothstep(0.010, 0.018, ax) * (1.0 - smoothstep(0.046, 0.054, ax));
+                    col = lerp(col, col * float3(0.45, 0.32, 0.32), saturate(crease * 0.8));
+                    // narinas
+                    float2 nn = float2((ax - 0.0115) / 0.0042, (y - 1.5525) / 0.0032);
+                    col = lerp(col, col * float3(0.25, 0.14, 0.15), saturate(1.1 - length(nn)) * step(0.125, fr.z));
+                    // boca: lábios rosados e linha escura entre eles
+                    float2 lp = float2(ax / 0.030, (y - 1.5275) / 0.0125);
+                    col = lerp(col, col * float3(0.95, 0.50, 0.54), saturate((1.15 - length(lp)) * 1.2) * 0.9);
+                    float seam = exp(-pow((y - 1.5272) / 0.0010, 2.0)) * (1.0 - smoothstep(0.022, 0.032, ax));
+                    col = lerp(col, col * float3(0.30, 0.14, 0.15), saturate(seam));
+                    // bochechas
+                    float cheek = exp(-(pow(ax - 0.055, 2.0) + pow(y - 1.558, 2.0)) / (2.0 * 0.022 * 0.022));
+                    col *= lerp(1.0, float3(1.05, 0.82, 0.80), cheek * 0.35);
+                }
             }
             float b = saturate(IN.blood);
             float ch = saturate(IN.charred);

@@ -19,6 +19,8 @@ public class Wound
     public GameObject visual;
     public Material trickle;               // filete de sangue escorrendo (WoundFx)
     public float trickleGrow;
+    public float flow;                     // comprimento (m) do filete de sangue que já escorreu pela pele
+    public bool flowDone;
 
     /// Taxa externa efetiva em ml/s antes de pressão arterial/cardíaca.
     public float ExternalRate()

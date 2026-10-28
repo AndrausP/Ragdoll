@@ -8,6 +8,9 @@ public partial class Dummy
 {
     class Ev { public float t, len; public string type; public BoneState bone; public OrganState organ; public VesselState vessel; }
 
+    // onde e com que "irregularidade" o último golpe atingiu: o corte da amputação usa isso (Dummy.Cut.cs)
+    Vector3? cutHint; float cutRagged = 0.5f;
+
     public PenResult ApplyPenetration(DummyPart p, Vector3 entryW, Vector3 dirW, float energy, Prof prof, Vector3 normalW)
     {
         if (dead && p.destroyed) return new PenResult { stopped = true, exit = entryW, energy = 0f };
@@ -141,6 +144,7 @@ public partial class Dummy
         {
             var w2 = new Wound { kind = "saída", localPos = o + dl * tFull, localNormal = dl, bleed = p.def.baseBleed * prof.bleed * 1.5f, pain = 0.05f };
             p.AddWound(w2);
+            DeformSkin(p, w2, prof, Mathf.Max(eLeft, 0f));
         }
         acutePain += painAdd;
         bool blunt = prof.kind == "contusão";
@@ -181,6 +185,9 @@ public partial class Dummy
         if (summary.Count > 0) Game.LogEvent($"{prof.name} → {p.def.name}: {string.Join(", ", summary)}", new Color(1, 0.55f, 0.5f));
         else if (arterial || woundBleed > 4f) Game.LogEvent($"{prof.name} → {p.def.name}: sangramento intenso", new Color(1, 0.6f, 0.55f));
         entryLast = entryW;
+        cutHint = entryW;
+        cutRagged = prof.kind == "corte" || prof.kind == "perfuração" ? 0.12f : prof.kind == "machado" ? 0.45f : 0.9f;
+        DeformSkin(p, w, prof, used);
         AfterDamage(p, dirW, imp, sdmg);
         return new PenResult { stopped = stopped, exit = exitW, energy = Mathf.Max(eLeft, 0f) };
     }
@@ -254,6 +261,7 @@ public partial class Dummy
             WallDamage(p, 90f * intensity * power, lc * p.PartRadius(), lc);
         }
         p.impactGrace = 0.4f;
+        cutHint = p.transform.position; cutRagged = 1f;
         acutePain += 0.1f * push;
         if (p.Freeze)
         {
@@ -318,6 +326,7 @@ public partial class Dummy
 
     public void SeverPart(DummyPart p, Vector3 dirW)
     {
+        if (TryMeshCut(p, dirW)) return;
         if (p.cutHere || p.destroyed || p.parentPart == null) return;
         if (state == State.STANDING) Collapse();
         bool wasAttached = !p.severed;

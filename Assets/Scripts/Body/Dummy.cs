@@ -158,7 +158,7 @@ public partial class Dummy : MonoBehaviour
         skinShader.SetColor("_SkinColor", DummyPart.SKIN);
         skinShader.SetColor("_BloodColor", DummyPart.BLOOD_DARK);
         skinShader.SetFloat("_UseVC", sm.hasColors ? 1 : 0);
-        if (look != null) skinShader.SetFloat("_Sheen", look.sheen);
+        if (look != null) { skinShader.SetFloat("_Sheen", look.sheen); skinShader.SetColor("_HairColor", look.hair); }
         skinShader.SetFloatArray("_Blood", bloodLevels);
         skinShader.SetFloatArray("_Char", charLevels);
         var fabric = Resources.Load<Texture2D>("Textures/Fabric030_Color");
@@ -318,7 +318,14 @@ public partial class Dummy : MonoBehaviour
         }
     }
 
-    void LateUpdate() => UpdateSkin();
+    float flowTimer;
+    void LateUpdate()
+    {
+        UpdateSkin();
+        flowTimer += Time.deltaTime;
+        if (flowTimer > 0.3f) { FlowStep(flowTimer); flowTimer = 0f; }
+        FlushMesh();
+    }
 
     // ------------------------------------------------------------------ juntas
 

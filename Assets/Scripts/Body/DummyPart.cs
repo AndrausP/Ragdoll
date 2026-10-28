@@ -216,7 +216,8 @@ public class DummyPart : MonoBehaviour
 
     public void AddBloodiness(float v)
     {
-        bloodiness = Mathf.Clamp(bloodiness + v, 0f, 0.92f);
+        // o sangue na pele é local (mancha + filete que escorre, ver Dummy.Blood.cs); aqui só um leve tom geral da parte
+        bloodiness = Mathf.Clamp(bloodiness + v * 0.25f, 0f, 0.14f);
         float a = Mats.GetColor(skinMat).a;
         var c = Color.Lerp(skinTint, BLOOD_DARK, bloodiness);
         c.a = a;

@@ -186,7 +186,9 @@ def paint(pos, dom, rng):
     shorts &= ~shirt
     col[shirt] = SHIRT * (0.95 + 0.10 * rng.random((int(shirt.sum()), 1)))
     col[shorts] = SHORTS * (0.95 + 0.10 * rng.random((int(shorts.sum()), 1)))
-    return col
+    alpha = np.ones(n)
+    alpha[shorts] = 0.5
+    return col, alpha
 
 
 def winding_sign(pos, nrm, idx):
@@ -247,7 +249,7 @@ def main():
     dom = order[:, 0]
 
     rng = np.random.default_rng(7)
-    col = paint(pos, dom, rng)
+    col, alpha = paint(pos, dom, rng)       # alfa: 1 pele/camisa, 0,5 short; olhos mexem depois (0,25 íris, 0,9 resto)
     # olhos: esclera clara com íris escura no lado da frente
     for side in (1, -1):
         sel = eye_sel[np.sign(pos[eye_sel, 0]) == side]
@@ -255,12 +257,19 @@ def main():
         dvec = pos[sel] - c; dvec /= np.linalg.norm(dvec, axis=1, keepdims=True)
         iris = dvec[:, 2] > 0.55
         pupil = dvec[:, 2] > 0.93
-        col[sel] = np.where(pupil[:, None], np.array([0.02, 0.02, 0.02]), np.where(iris[:, None], np.array([0.22, 0.14, 0.08]), np.array([0.72, 0.66, 0.62])))
+        col[sel] = np.where(pupil[:, None], np.array([0.02, 0.02, 0.02]), np.where(iris[:, None], np.array([0.22, 0.14, 0.08]), np.array([0.80, 0.70, 0.62])))
+        alpha[sel] = np.where(iris, 0.25, 0.9)          # 0,25 íris (cor por boneco), 0,9 esclera/pupila (fixas)
 
     # pequenos detalhes: aréolas mais escuras, boca, unhas
     col[prim_of == 1] = SKIN * 0.72
     col[prim_of == 2] = np.array([0.55, 0.30, 0.28])
     col[(prim_of == 3) | (prim_of == 4)] = np.array([0.78, 0.58, 0.50])
+
+    # olhos menores (o globo do modelo fica grande em relação às pálpebras): encolhe 14% em torno do centro de cada olho
+    for side in (1, -1):
+        sel = eye_sel[np.sign(pos[eye_sel, 0]) == side]
+        c = pos[sel].mean(0)
+        pos[sel] = c + (pos[sel] - c) * 0.86
 
     # convenção de enrolamento: a do arquivo antigo
     old = read_bgm(a.old)
@@ -277,7 +286,7 @@ def main():
         if a.no_hair and k.startswith('hair_'): continue
         out[k] = m
     out['body'] = {
-        'pos': pos, 'nrm': nrm, 'col': np.hstack([col, np.ones((n, 1))]),
+        'pos': pos, 'nrm': nrm, 'col': np.hstack([col, alpha[:, None]]),
         'uv2': (dom + 0.5) / 32.0, 'bi': order.astype(np.uint8), 'bw': bw,
         'subs': [('skin', np.array([0.8, 0.8, 0.8, 1.0]), idx)],
     }
@@ -290,7 +299,7 @@ def main():
         if len(sel) == 0: continue
         used, inv = np.unique(sel.reshape(-1), return_inverse=True)
         out['skin_' + pid] = {
-            'pos': pos[used] - anat[pid][0], 'nrm': nrm[used], 'col': np.hstack([col[used], np.ones((len(used), 1))]),
+            'pos': pos[used] - anat[pid][0], 'nrm': nrm[used], 'col': np.hstack([col[used], alpha[used, None]]),
             'subs': [('skin', np.array([0.8, 0.8, 0.8, 1.0]), inv.astype(np.int32))],
         }
     write_bgm(a.out, out)

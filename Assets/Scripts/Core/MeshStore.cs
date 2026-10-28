@@ -163,9 +163,24 @@ public static class MeshStore
                 if (nm.Contains(f.key)) { metal = f.metal; rough = f.rough; break; }
             if (nm.Contains("dark")) rough = Mathf.Min(1f, rough + 0.12f);
             if (nm.Contains("light")) rough = Mathf.Max(0.05f, rough - 0.08f);
-            var c = sm.materialColors[i];
-            // as cores do glTF são lineares; o Unity (espaço gamma padrão) espera sRGB
-            mats[i] = Mats.Mat(c.gamma, rough, metal);
+            var c = sm.materialColors[i].gamma;      // as cores do glTF são lineares; o Unity (gamma) espera sRGB
+            bool metalPart = nm.Contains("metal") || nm.Contains("steel");
+            bool polymer = !metalPart && (nm.Contains("black") || nm.Contains("grey") || nm.Contains("main"));
+            if (metalPart && c.maxColorComponent < 0.5f)
+            {
+                // metal de arma de fogo: aço escovado em vez de preto (sem reflexo suficiente na sala, metal escuro some)
+                float k = 0.55f / Mathf.Max(0.05f, (c.r + c.g + c.b) / 3f);
+                c = new Color(Mathf.Min(0.62f, c.r * k * 0.95f), Mathf.Min(0.62f, c.g * k), Mathf.Min(0.66f, c.b * k * 1.05f), 1f);
+                metal = 0.6f; rough = nm.Contains("dark") ? 0.5f : 0.38f;
+            }
+            else if (polymer)
+            {
+                // polímero: cinza-chumbo fosco, com diferença entre peças (Main/MainDark/MainLight)
+                float g = nm.Contains("dark") ? 0.26f : nm.Contains("light") ? 0.46f : 0.34f;
+                c = new Color(g, g, g * 1.06f, 1f); metal = 0.05f; rough = 0.55f;
+            }
+            else if (nm.Contains("wood")) c = new Color(Mathf.Min(1f, c.r * 1.5f), Mathf.Min(1f, c.g * 1.5f), Mathf.Min(1f, c.b * 1.5f), 1f);
+            mats[i] = Mats.Mat(c, rough, metal);
         }
         weaponMats[key] = mats;
         return mats;

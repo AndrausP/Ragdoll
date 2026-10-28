@@ -62,6 +62,21 @@ public static class VmArms
                 tris.Add(ni);
             }
         }
+        // antebraço mais cheio e com manga (jaqueta escura até o punho): sem isso o braço parece um tubo de pele
+        {
+            var elb0 = defs[parts[1]].joint.anchor; var wr0 = defs[parts[2]].joint.anchor;
+            var ax0 = (wr0 - elb0).normalized; float len0 = (wr0 - elb0).magnitude;
+            var sleeve = new Color(0.13f, 0.14f, 0.11f, 1f);
+            for (int i = 0; i < verts.Count; i++)
+            {
+                float t = Vector3.Dot(verts[i] - elb0, ax0) / len0;       // 0 cotovelo, 1 punho
+                var onAxis = elb0 + ax0 * Mathf.Clamp(t, -0.5f, 1f) * len0;
+                float cuff = Mathf.Clamp01((0.92f - t) / 0.05f);           // 1 = manga, 0 = pele (punho)
+                verts[i] += (verts[i] - onAxis) * 0.16f * cuff;            // volume da manga
+                var c0 = cols[i];
+                cols[i] = Color.Lerp(c0, sleeve * (0.9f + 0.2f * Mathf.PerlinNoise(verts[i].x * 90f, verts[i].y * 90f)), cuff);
+            }
+        }
         // blend shape "punho" no espaço local da mão (Godot: y para cima, palma em +z)
         var hPos = defs[parts[2]].pos;
         float sgn = side == "l" ? 1f : -1f;

@@ -100,8 +100,9 @@ public class DummyPart : MonoBehaviour
             m = skin.mesh;
             if (dummy.look != null && skin.hasColors)
             {
-                m = Object.Instantiate(skin.mesh);         // cópia própria: cores deste boneco
-                m.colors = dummy.look.Recolor(m.colors);
+                m = Object.Instantiate(skin.mesh);         // cópia própria: cores e formato deste boneco
+                dummy.look.ShapePart(partId, m);
+                m.colors = dummy.look.Recolor(m.colors, m.vertices, def.pos);
             }
             Mats.SetRough(skinMat, 0.6f);
             if (skin.hasColors)

@@ -120,7 +120,11 @@ public partial class Dummy : MonoBehaviour
             allBind.Add(Matrix4x4.Translate(-anchor));
         }
         var mesh = Object.Instantiate(sm.mesh);
-        if (look != null && sm.hasColors) mesh.colors = look.Recolor(mesh.colors);
+        if (look != null)
+        {
+            look.Shape(mesh);
+            if (sm.hasColors) mesh.colors = look.Recolor(mesh.colors, mesh.vertices);
+        }
         mesh.boneWeights = HelperWeights(mesh.boneWeights, defs);
         // posição/normal de repouso para o detalhe (tecido, poros) não escorregar com a deformação
         mesh.SetUVs(2, new List<Vector3>(sm.vertices));

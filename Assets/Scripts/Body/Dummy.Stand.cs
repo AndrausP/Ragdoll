@@ -380,7 +380,7 @@ public partial class Dummy
         float rate = stanceHurt ? 1.7f : 1f;
         if (gaitAmp > 0.01f)
         {
-            gaitPhase += dt / ts * rate;
+            gaitPhase += dt / ts * rate * (look != null ? look.gaitMul : 1f);
             if (gaitPhase >= 1f)
             {
                 gaitPhase -= 1f;
@@ -454,7 +454,8 @@ public partial class Dummy
         var fl = Quaternion.identity;
         if (flinch.magnitude > 1e-5f) fl = U.Axis(flinch.normalized, Mathf.Clamp(flinch.magnitude, 0f, 0.6f));
         // curva o tronco com dor/desequilíbrio; inclina para a frente ao correr; dobra ao segurar a perna
-        float bend = Mathf.Clamp(pain * 0.22f + unsteady * 0.2f + holdWound * 0.12f + run * 0.22f, 0f, 0.5f) + (clutch ? 0.65f : 0f);
+        float bend = Mathf.Clamp(pain * 0.22f + unsteady * 0.2f + holdWound * 0.12f + run * 0.22f, 0f, 0.5f) + (clutch ? 0.65f : 0f)
+                     + (look != null ? look.slouch : 0f);        // postura própria: uns andam curvados
         fl = fl * U.Axis(Vector3.right, bend);
 
         // mãos: segurar a ferida do tronco / as duas mãos na perna / mãos para cima
@@ -506,7 +507,8 @@ public partial class Dummy
                 if (id == kk.Key || IsDescendant(id, kk.Key)) xf = RotAbout(xf, defs[kk.Key].joint.anchor, U.Euler(kk.Value));
             if (id == "head")
             {
-                var idle = U.Axis(Vector3.up, Mathf.Sin(standTime * 0.31f) * 0.25f * (1f - lookBlend)) * U.Axis(Vector3.right, Mathf.Sin(standTime * 0.23f) * 0.06f + pain * 0.2f);
+                var idle = U.Axis(Vector3.up, Mathf.Sin(standTime * 0.31f) * 0.25f * (1f - lookBlend)) * U.Axis(Vector3.right, Mathf.Sin(standTime * 0.23f) * 0.06f + pain * 0.2f + (look != null ? look.slouch * 0.7f : 0f))
+                           * U.Axis(Vector3.forward, look != null ? look.headTilt : 0f);
                 xf = RotAbout(xf, defs["head"].joint.anchor, Quaternion.Slerp(Quaternion.identity, lookQ, lookBlend * 0.65f) * idle);
             }
             if (id == "neck" || id == "head")

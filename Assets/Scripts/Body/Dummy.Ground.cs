@@ -38,8 +38,113 @@ public partial class Dummy
         { "crawl_r", P("neck", V(-0.6f, 0, 0), "head", V(-0.3f, 0, 0), "chest", V(-0.15f, 0, 0),
             "upper_arm_l", V(-0.5f, 0, 0.2f), "forearm_l", V(-1.6f, 0, 0), "upper_arm_r", V(-2.1f, 0, -0.1f), "forearm_r", V(-0.25f, 0, 0),
             "thigh_l", V(0.0f, 0, 0.1f), "shin_l", V(0.2f, 0, 0), "thigh_r", V(-0.3f, 0, -0.15f), "shin_r", V(0.6f, 0, 0)) },
+        // postura flexora (decorticação): braços fletidos junto ao peito, pernas estendidas, pés em ponta;
+        // aparece nas convulsões de quem está morrendo por falta de oxigênio no cérebro
+        { "arch", P("abdomen", V(-0.55f, 0, 0), "chest", V(-0.5f, 0, 0), "neck", V(-0.85f, 0, 0), "head", V(-0.55f, 0, 0),
+            "thigh_l", V(0.25f, 0, 0.12f), "shin_l", V(0.05f, 0, 0), "thigh_r", V(0.25f, 0, -0.12f), "shin_r", V(0.05f, 0, 0),
+            "upper_arm_l", V(-0.7f, 0, 0.35f), "forearm_l", V(-1.9f, 0, 0), "upper_arm_r", V(-0.7f, 0, -0.35f), "forearm_r", V(-1.9f, 0, 0),
+            "foot_l", V(-0.7f, 0, 0), "foot_r", V(-0.7f, 0, 0)) },
+        // suspiro agônico: cabeça e pescoço jogados para trás, peito sobe
+        { "gasp", P("chest", V(-0.22f, 0, 0), "neck", V(-0.75f, 0, 0), "head", V(-0.5f, 0, 0), "abdomen", V(-0.12f, 0, 0)) },
         { "limp", new Dictionary<string, Vector3>() },
     };
+
+    // ---- agonia em camadas: pose-base + ruído por junta + suspiros + espasmos (ver docs/agonia.md)
+    float agonyClock, gaspT, gaspCd = 1.5f, spasmT, spasmDur, spasmCd = 3f, spasmAmp, spasmPhase, groanCd = 2f;
+    public int spasmCount, gaspCount;
+    /// Gancho de teste: força uma ação de agonia (writhe, fetal, clutch...).
+    public void DebugAction(string act, string pose, float dur) { action = act; curPose = pose; actionDur = dur; actionTime = 0f; }
+    public string AgonyDebug => $"ação={action} pose={curPose} spasmos={spasmCount} suspiros={gaspCount}";
+    float writhePhase, writheW;
+    readonly Dictionary<string, Vector3> poseBuf = new Dictionary<string, Vector3>();
+    readonly Dictionary<string, Vector3> spasmDir = new Dictionary<string, Vector3>();
+    static readonly string[] SPINE = { "abdomen", "chest", "neck", "head" };
+
+    /// 0 = longe da morte, 1 = nos últimos instantes (perda de sangue, falta de oxigênio, parada cardíaca).
+    float Dying()
+    {
+        float bf = blood / Anatomy.BLOOD_TOTAL;
+        float d = Mathf.Max((0.72f - bf) / 0.3f, hypoxiaTime / 18f);
+        if (cardiacArrest) d = 1f;
+        return Mathf.Clamp01(d);
+    }
+
+    static float Wander(float t, float freq, float seed) => Mathf.PerlinNoise(t * freq + seed * 13.7f, seed * 3.1f) * 2f - 1f;
+
+    /// Reflexos do tronco cerebral, independentes de consciência: suspiros e espasmos. Só impulsos (sem PD), então
+    /// funcionam também inconsciente e depois de morto. `scale` apaga os efeitos com o tempo.
+    void Reflexes(float dt, float dying, float scale)
+    {
+        if (scale <= 0.01f || Game.legacyAgony) return;
+        // --- suspiro agônico: irregular, cada vez mais espaçado
+        gaspCd -= dt;
+        if (gaspT > 0f) gaspT -= dt;
+        if (gaspCd <= 0f && (dying > 0.2f || consciousness < 0.45f))
+        {
+            gaspCd = Mathf.Lerp(2.2f, 7f, dying) * U.RandRange(0.7f, 1.5f);
+            gaspT = 0.7f; gaspCount++;
+            if (parts.TryGetValue("head", out var hd) && hd)
+            {
+                Game.sfx.Play("gasp", hd.transform.position, -9f * (2f - scale), U.RandRange(0.85f, 1.1f));
+                if (hd.parentPart != null && hd.parentPart)
+                    hd.rb.AddTorque(-hd.parentPart.transform.right * 6f * scale, ForceMode.VelocityChange);   // joga a cabeça para trás (~6 rad/s, independe da inércia)
+            }
+            if (parts.TryGetValue("chest", out var ch0) && ch0) ch0.rb.AddForce(Vector3.up * U.RandRange(2f, 5f) * scale, ForceMode.Impulse);
+        }
+        // --- espasmo: rajada clônica (≈5 Hz) que decai, com extensão em arco no começo
+        spasmCd -= dt;
+        if (spasmT > 0f)
+        {
+            spasmT -= dt;
+            spasmPhase += dt * U.TAU * U.RandRange(4.2f, 5.6f);
+            float env = Mathf.Pow(Mathf.Clamp01(spasmT / spasmDur), 0.7f) * spasmAmp * scale;
+            float s = Mathf.Sin(spasmPhase);
+            foreach (var p in AttachedLimbs())
+            {
+                if (!spasmDir.TryGetValue(p.partId, out var dir)) spasmDir[p.partId] = dir = U.RandomUnit();
+                p.rb.AddForce(dir * s * env * p.mass * 14f);
+            }
+            if (parts.TryGetValue("chest", out var ch) && ch && parts.TryGetValue("pelvis", out var pv) && pv)
+            {
+                ch.rb.AddTorque(ch.transform.right * s * env * 7f);
+                pv.rb.AddTorque(pv.transform.right * -s * env * 4f);
+            }
+        }
+        else if (spasmCd <= 0f && dying > 0.3f)
+        {
+            spasmCd = U.RandRange(2.5f, 6f) * (1.4f - dying);
+            spasmDur = U.RandRange(0.9f, 2.2f); spasmT = spasmDur; spasmAmp = Mathf.Lerp(0.7f, 1.2f, dying);
+            spasmPhase = 0f; spasmCount++; spasmDir.Clear();
+        }
+    }
+
+    /// Mistura pose-base com o suspiro e o arco (espasmo) e soma ruído por junta (tremor + vagar lento).
+    Dictionary<string, Vector3> ComposePose(Dictionary<string, Vector3> a, Dictionary<string, Vector3> b, float blend, float intensity, float dying)
+    {
+        poseBuf.Clear();
+        if (Game.legacyAgony) { foreach (var kv in a) poseBuf[kv.Key] = kv.Value; return poseBuf; }
+        float gaspW = gaspT > 0f ? Mathf.Sin(Mathf.Clamp01(gaspT / 0.7f) * Mathf.PI) : 0f;
+        float archW = spasmT > 0f ? Mathf.Clamp01(Mathf.Min(spasmDur - spasmT, spasmT) / 0.25f) * spasmAmp : 0f;
+        float tremor = Mathf.Clamp01(pain * consciousness * 0.6f + dying * 0.5f);          // tremor de choque
+        int k = 0;
+        foreach (var id in Anatomy.ORDER)
+        {
+            k++;
+            Vector3 v = Vector3.zero; bool has = false;
+            if (a.TryGetValue(id, out var va)) { v = va; has = true; }
+            if (b != null && b.TryGetValue(id, out var vb)) { v = has ? Vector3.Lerp(va, vb, blend) : vb * blend; has = true; }
+            if (POSES["gasp"].TryGetValue(id, out var vg)) { v = Vector3.Lerp(v, vg, gaspW); has = true; }
+            if (archW > 0f && POSES["arch"].TryGetValue(id, out var vr)) { v = Vector3.Lerp(v, vr, Mathf.Clamp01(archW)); has = true; }
+            if (!has && intensity > 0.2f && id != "pelvis") { v = Vector3.zero; has = true; }
+            if (!has) continue;
+            bool limb = id.StartsWith("upper") || id.StartsWith("fore") || id.StartsWith("thigh") || id.StartsWith("shin") || id.StartsWith("hand") || id.StartsWith("foot");
+            float amp = (limb ? 0.20f : 0.07f) * Mathf.Clamp01(intensity);
+            var n = new Vector3(Wander(agonyClock, 0.9f, k), Wander(agonyClock, 0.8f, k + 40f), Wander(agonyClock, 0.7f, k + 80f)) * amp;
+            n += new Vector3(Mathf.Sin(agonyClock * 47f + k), Mathf.Sin(agonyClock * 53f + k * 2f), 0f) * 0.03f * tremor;
+            poseBuf[id] = v + n;
+        }
+        return poseBuf;
+    }
 
     void RagdollStep(float dt)
     {
@@ -53,8 +158,9 @@ public partial class Dummy
             p.lastVel = v;
         }
         foreach (var p in ValidParts()) p.pressure = U.MoveToward(p.pressure, 0f, dt * 1.5f);
+        agonyClock += dt;
         if (dead) { DeathTwitch(dt); return; }
-        if (state == State.UNCONSCIOUS) { muscleLevel = 0f; Twitch(dt, 0.15f); return; }
+        if (state == State.UNCONSCIOUS) { muscleLevel = 0f; Twitch(dt, 0.15f); Reflexes(dt, Mathf.Max(0.5f, Dying()), 0.8f); return; }
         Agony(dt);
     }
 
@@ -68,6 +174,7 @@ public partial class Dummy
     void DeathTwitch(float dt)
     {
         float since = timeAlive - deathTime;
+        Reflexes(dt, 1f, Mathf.Clamp01(1f - since / 14f));
         if (since > 7f) return;
         twitchCd -= dt;
         if (twitchCd <= 0f)
@@ -181,6 +288,15 @@ public partial class Dummy
         muscleLevel = consciousness * vigor * (cardiacArrest ? 0.25f : 1f);
         float pf = pain * consciousness;
         float intensity = Mathf.Clamp(0.35f + pf, 0.35f, 1.3f) * muscleLevel;
+        float dying = Dying();
+        Reflexes(dt, dying, 1f);
+        groanCd -= dt;
+        if (groanCd <= 0f)
+        {
+            groanCd = U.RandRange(3f, 7f) * Mathf.Lerp(1f, 1.8f, dying);
+            if (!Game.legacyAgony && pf > 0.45f && consciousness > 0.35f && parts.TryGetValue("head", out var gh) && gh)
+                Game.sfx.Play("groan", gh.transform.position, -10f, U.RandRange(0.85f, 1.12f));
+        }
         actionTime += dt;
         if (actionTime > actionDur) ChooseAction();
         var skip = new List<string>();
@@ -215,14 +331,24 @@ public partial class Dummy
                 else if (reachTimer > 6f && pressTimer < 0.1f) actionTime = actionDur;
                 break;
             case "writhe":
-                poseTimer -= dt;
-                if (poseTimer <= 0f)
+                if (Game.legacyAgony)
                 {
-                    curPose = curPose == "writhe_a" ? "writhe_b" : "writhe_a";
-                    poseTimer = U.RandRange(0.45f, 1.1f) / Mathf.Max(0.4f, intensity);
-                    rollSign = -rollSign;
+                    poseTimer -= dt;
+                    if (poseTimer <= 0f)
+                    {
+                        curPose = curPose == "writhe_a" ? "writhe_b" : "writhe_a";
+                        poseTimer = U.RandRange(0.45f, 1.1f) / Mathf.Max(0.4f, intensity);
+                        rollSign = -rollSign;
+                    }
+                    Roll(rollSign * 55f * intensity);
                 }
-                Roll(rollSign * 55f * intensity);
+                else
+                {
+                    // vai e volta entre as duas poses de forma contínua (seno), com a velocidade ligada à dor/força
+                    writhePhase += dt * Mathf.Max(1.1f, 4.2f * intensity) * (1f + 0.25f * Wander(agonyClock, 0.6f, 5f));
+                    writheW = 0.5f + 0.5f * Mathf.Sin(writhePhase);
+                    Roll(Mathf.Cos(writhePhase) * 62f * intensity);
+                }
                 if (U.Randf() < dt * 2f * intensity)
                 {
                     var arr = AttachedLimbs();
@@ -236,7 +362,10 @@ public partial class Dummy
                 Crawl(dt);
                 break;
         }
-        ApplyPose(POSES[curPose], skip, 1f);
+        bool blendW = action == "writhe" && !Game.legacyAgony;
+        var baseA = POSES[blendW ? "writhe_a" : curPose];
+        var baseB = blendW ? POSES["writhe_b"] : null;
+        ApplyPose(ComposePose(baseA, baseB, blendW ? writheW : 0f, intensity, dying), skip, 1f);
     }
 
     void Roll(float torque)

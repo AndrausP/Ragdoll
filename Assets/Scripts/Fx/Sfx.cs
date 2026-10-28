@@ -41,6 +41,8 @@ public class Sfx : MonoBehaviour
         streams["shotgun"] = Gun(0.75f, 16f, 60f, 0.9f);
         streams["sniper"] = Gun(1.2f, 12f, 50f, 1f);
         streams["flesh"] = Flesh(0.16f);
+        streams["gasp"] = Gasp(0.9f);
+        streams["groan"] = Groan(1.1f);
         streams["bone"] = Bone();
         streams["sever"] = Sever();
         streams["gib"] = GibS();
@@ -151,6 +153,42 @@ public class Sfx : MonoBehaviour
             s[i] = lp * 3f * Mathf.Exp(-t * 30f) + Mathf.Sin(U.TAU * 70f * t) * Mathf.Exp(-t * 40f) * 0.7f;
         }
         return Wav(s, "flesh");
+    }
+
+    /// Suspiro agônico: ar áspero filtrado (ataque rápido, queda lenta) com um sopro vozeado fraco por baixo.
+    AudioClip Gasp(float sec)
+    {
+        var s = Buf(sec); float lp = 0, lp2 = 0, ph = 0;
+        for (int i = 0; i < s.Length; i++)
+        {
+            float t = (float)i / RATE;
+            float env = (1f - Mathf.Exp(-t * 22f)) * Mathf.Exp(-t * 3.4f);
+            lp += (N() - lp) * 0.22f; lp2 += (lp - lp2) * 0.10f;
+            float band = (lp - lp2) * 5f;                                  // faixa ~500-1800 Hz: o "chiado" da garganta
+            ph += U.TAU * (150f + 25f * Mathf.Sin(t * 9f)) / RATE;
+            float voice = Mathf.Sin(ph) * 0.08f * Mathf.Exp(-t * 2f);
+            s[i] = (band + voice) * env * 0.9f;
+        }
+        return Wav(s, "gasp");
+    }
+
+    /// Gemido: vogal "ah" (formantes ~700 e 1100 Hz) sobre um tom grave com vibrato e instabilidade.
+    AudioClip Groan(float sec)
+    {
+        var s = Buf(sec); float ph = 0, f1 = 0, f1v = 0, f2 = 0, f2v = 0;
+        for (int i = 0; i < s.Length; i++)
+        {
+            float t = (float)i / RATE;
+            float env = Mathf.Min(1f, t * 8f) * Mathf.Exp(-Mathf.Max(0f, t - 0.25f) * 2.4f);
+            float f0 = 118f - 22f * t + 5f * Mathf.Sin(t * 38f) + N() * 1.5f;
+            ph += U.TAU * f0 / RATE;
+            float src = (Mathf.Sin(ph) + 0.5f * Mathf.Sin(2f * ph) + 0.3f * Mathf.Sin(3f * ph)) * 0.5f + N() * 0.12f;
+            // dois ressonadores (filtro de dois polos)
+            f1v += (src - f1) * 0.30f; f1v *= 0.93f; f1 += f1v * 0.30f;
+            f2v += (src - f2) * 0.46f; f2v *= 0.90f; f2 += f2v * 0.46f;
+            s[i] = (f1 * 1.3f + f2 * 0.7f) * env * 0.9f;
+        }
+        return Wav(s, "groan");
     }
 
     AudioClip Bone()

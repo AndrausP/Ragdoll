@@ -152,7 +152,14 @@ public class PhysTest : MonoBehaviour
         var ds = Game.dummies;
         var a = ds[0];
         a.Collapse();
-        yield return new WaitForSeconds(5f);
+        float restT = -1f, tt = 0f;
+        while (tt < 5f)
+        {
+            yield return new WaitForSeconds(0.1f);
+            tt += 0.1f;
+            if (restT < 0f && tt > 0.4f && Metrics(a).vmax < 0.15f) restT = tt;
+        }
+        Debug.Log($"[{a.dummyName}] tempo até repouso: {(restT < 0f ? "não repousou em 5s" : restT.ToString("F1") + "s")}");
         Rest(a, "queda simples (5s)");
         var b = ds[1];
         b.Collapse();
@@ -193,8 +200,32 @@ public class PhysTest : MonoBehaviour
         Application.Quit();
     }
 
+    struct M { public float vmax, wmax, energy, depth, gap; public string gid; }
+
+    /// Métricas de estabilidade: velocidades, energia cinética, penetração no chão, junta mais aberta.
+    static M Metrics(Dummy d)
+    {
+        var m = new M { gid = "" };
+        foreach (var p in d.ValidParts())
+        {
+            float v = p.rb.linearVelocity.magnitude, w = p.rb.angularVelocity.magnitude;
+            m.vmax = Mathf.Max(m.vmax, v); m.wmax = Mathf.Max(m.wmax, w);
+            m.energy += 0.5f * p.mass * v * v;
+            m.depth = Mathf.Max(m.depth, -p.transform.position.y);
+            if (p.parentPart && !p.severed && p.def.joint != null)
+            {
+                var anc = p.def.joint.anchor;
+                float g = Vector3.Distance(p.parentPart.Xform.Apply(anc - p.parentPart.def.pos), p.Xform.Apply(anc - p.def.pos));
+                if (g > m.gap) { m.gap = g; m.gid = p.partId; }
+            }
+        }
+        return m;
+    }
+
     void Rest(Dummy d, string label)
     {
+        var mt = Metrics(d);
+        Debug.Log($"  métricas {label}: energia cinética {mt.energy:F2} J, profundidade máx abaixo do chão {mt.depth:F3} m");
         float vmax = 0, wmax = 0, gap = 0; int below = 0; string gid = "";
         foreach (var p in d.ValidParts())
         {

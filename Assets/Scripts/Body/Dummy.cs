@@ -70,7 +70,7 @@ public partial class Dummy : MonoBehaviour
         foreach (var id in Anatomy.ORDER)
         {
             chainInertia[id] = ComputeChainInertia(parts[id]);
-            prevPos[id] = parts[id].transform.position;
+            prevPos[id] = parts[id].transform.position; prevRot[id] = parts[id].transform.rotation;
         }
         standRoot = root;
         BuildSkin();

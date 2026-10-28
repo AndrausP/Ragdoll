@@ -71,7 +71,9 @@ public class DummyPart : MonoBehaviour
 
     void BuildShape()
     {
-        var pm = new PhysicsMaterial { dynamicFriction = 0.75f, staticFriction = 0.75f, bounciness = 0.02f };
+        // sola agarra o piso, mão e cabeça meio termo, tronco e membros deslizam (roupa/pele)
+        float fr = partId.StartsWith("foot") ? 1.1f : partId.StartsWith("hand") ? 0.85f : partId == "head" ? 0.7f : 0.6f;
+        var pm = new PhysicsMaterial { dynamicFriction = fr, staticFriction = fr + 0.1f, bounciness = 0.02f };
         Mesh prim;
         switch (def.shape)
         {

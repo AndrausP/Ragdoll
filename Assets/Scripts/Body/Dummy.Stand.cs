@@ -8,6 +8,7 @@ public partial class Dummy
     // ---- pose em pé / equilíbrio (igual ao Godot)
     Xf standRoot = Xf.Identity;
     readonly Dictionary<string, Vector3> prevPos = new Dictionary<string, Vector3>();
+    readonly Dictionary<string, Quaternion> prevRot = new Dictionary<string, Quaternion>();
     float standTime, collapseTime = -1f;
     Vector3 flinch, flinchVel;
     public float balance = 1f;
@@ -499,7 +500,7 @@ public partial class Dummy
         {
             string id = kv.Key; var p = kv.Value;
             if (!p || p.severed || p.destroyed) continue;
-            prevPos[id] = p.transform.position;
+            prevPos[id] = p.transform.position; prevRot[id] = p.transform.rotation;
             var xf = Xf.At(p.def.pos);
             foreach (var kk in kicks)
                 if (id == kk.Key || IsDescendant(id, kk.Key)) xf = RotAbout(xf, defs[kk.Key].joint.anchor, U.Euler(kk.Value));
@@ -828,7 +829,7 @@ public partial class Dummy
         {
             var x = Mathf.Abs(lift) > 1e-4f ? kv.Value.Translated(new Vector3(0, lift, 0)) : kv.Value;
             var p = parts[kv.Key];
-            prevPos[kv.Key] = p.transform.position;
+            prevPos[kv.Key] = p.transform.position; prevRot[kv.Key] = p.transform.rotation;
             p.rb.position = x.p; p.rb.rotation = x.q;
             p.transform.SetPositionAndRotation(x.p, x.q);
         }
@@ -932,6 +933,14 @@ public partial class Dummy
             var v = (p.transform.position - pp) / dt;
             p.Freeze = false;
             p.rb.linearVelocity = U.LimitLength(v, 4f);
+            // velocidade angular da pose: a queda herda o giro em vez de partir do zero
+            if (prevRot.TryGetValue(kv.Key, out var q0))
+            {
+                (p.transform.rotation * Quaternion.Inverse(q0)).ToAngleAxis(out float ang, out Vector3 axis);
+                if (ang > 180f) ang -= 360f;
+                if (!float.IsInfinity(axis.x) && !float.IsNaN(axis.x))
+                    p.rb.angularVelocity = U.LimitLength(axis * (ang * Mathf.Deg2Rad / dt), 8f);
+            }
             p.lastVel = p.rb.linearVelocity;
             p.impactGrace = 0.5f;
             p.rb.WakeUp();

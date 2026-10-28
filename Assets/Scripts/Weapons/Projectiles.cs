@@ -257,7 +257,10 @@ public static class Explosions
         foreach (var d in new List<Dummy>(Game.dummies))
         {
             if (!d) continue;
-            foreach (var p in d.ValidParts())
+            // das pontas para o tronco: a mão/pé sai antes do antebraço/canela, que sai antes do braço/coxa
+            var order = d.ValidParts();
+            order.Sort((x, y) => Depth(y).CompareTo(Depth(x)));
+            foreach (var p in order)
             {
                 if (p.destroyed) continue;
                 float dist2 = Vector3.Distance(p.transform.position, pos) - p.PartRadius() * 0.5f;
@@ -285,6 +288,8 @@ public static class Explosions
             Weapons.FireRay(pos + dir * 0.06f, dir, U.RandRange(35f, 90f), Weapons.P_SHRAPNEL, null, radius * 1.6f, false);
         }
     }
+
+    static int Depth(DummyPart p) { int n = 0; for (var q = p.parentPart; q != null && n < 32; q = q.parentPart) n++; return n; }
 
     static void ExplosionFx(Vector3 pos, float power)
     {

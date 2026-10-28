@@ -270,14 +270,19 @@ public partial class Dummy : MonoBehaviour
             var p = kv.Value;
             if (!p || !boneProxy.TryGetValue(kv.Key, out var bt)) continue;
             Xf xf;
-            if (!p.severed || p.meshDetached)
+            if (!Collapsed(p))
                 xf = inv * p.Xform;     // osso = transformação da parte (a posição de repouso já está no bindpose)
             else
             {
+                // encolhe no ponto da junta do primeiro ancestral que ainda tem pele (corpo ou fragmento de corte)
                 var r = p;
-                while (r.parentPart != null && r.parentPart.severed) r = r.parentPart;
+                while (r.parentPart != null && Collapsed(r.parentPart)) r = r.parentPart;
                 var par = r.parentPart;
-                if (par == null || !par) continue;
+                if (par == null || !par)
+                {
+                    bt.localScale = Vector3.one * 0.001f;
+                    continue;
+                }
                 var a = r.def.joint.anchor;
                 // colapsa no ponto da junta do pai: par * T(a - par.pos) * S(0.001) * T(p.pos - a)
                 var parX = inv * par.Xform;
@@ -293,7 +298,7 @@ public partial class Dummy : MonoBehaviour
         {
             if (!kv.Key) continue;
             var fx = inv * kv.Key.Xform;
-            kv.Value.localPosition = fx.p; kv.Value.localRotation = fx.q; kv.Value.localScale = Vector3.one * fx.s;
+            kv.Value.localPosition = fx.p; kv.Value.localRotation = fx.q; kv.Value.localScale = Vector3.one * (kv.Key.destroyed ? 0.001f : fx.s);
         }
         // auxiliares: na junta, metade da rotação entre pai e filho (filho separado: segue o pai)
         foreach (var kv in helperBones)
@@ -301,7 +306,7 @@ public partial class Dummy : MonoBehaviour
             if (!parts.TryGetValue(kv.Key, out var c) || !c) continue;
             var par = c.parentPart;
             if (par == null || !par) continue;
-            if (par.severed && !par.meshDetached && boneProxy.TryGetValue(par.partId, out var pb))
+            if (Collapsed(par) && boneProxy.TryGetValue(par.partId, out var pb))
             {
                 // pai separado: imita o osso (colapsado) do pai — bind do auxiliar é T(-âncora), o do pai T(-pos)
                 kv.Value.localRotation = pb.localRotation;
@@ -311,7 +316,10 @@ public partial class Dummy : MonoBehaviour
             }
             var px = inv * par.Xform;
             var anchor = c.def.joint.anchor;
-            var q = c.severed && !c.meshDetached ? px.q : Quaternion.Slerp(px.q, (inv * c.Xform).q, 0.5f);
+            var q = Collapsed(c) ? px.q : Quaternion.Slerp(px.q, (inv * c.Xform).q, 0.5f);
+            // ombro e quadril: o auxiliar também leva pele do peito/virilha; com o membro jogado ao extremo (explosão,
+            // arremesso) ele arrastaria essa pele junto. Até 60° do tronco cobre as poses normais.
+            if (c.def.parent == "chest" || c.def.parent == "pelvis") q = Quaternion.RotateTowards(px.q, q, 60f);
             kv.Value.localPosition = px.Apply(anchor - par.def.pos);
             kv.Value.localRotation = q;
             kv.Value.localScale = Vector3.one;
@@ -329,15 +337,25 @@ public partial class Dummy : MonoBehaviour
 
     // ------------------------------------------------------------------ juntas
 
-    /// hingeShiftDeg: a junta criada com o corpo já dobrado trata a pose atual como zero; o deslocamento devolve os limites
-    /// da dobradiça ao intervalo anatômico (usado ao religar uma parte a um fragmento de corte).
-    void MakeJoint(DummyPart p, float hingeShiftDeg = 0f)
+    /// A junta trata a pose relativa do momento da criação como zero. `restRelative` (religar uma parte a um fragmento de
+    /// corte com o corpo já dobrado): cria a junta com a parte na pose de repouso em relação ao pai e devolve a pose
+    /// real em seguida, para os limites (dobradiça e cones de ombro, pulso, tornozelo, cabeça) ficarem anatômicos.
+    void MakeJoint(DummyPart p, bool restRelative = false)
     {
         var jd = p.def.joint;
+        var par = p.parentPart;
+        Vector3 keepP = p.transform.position; Quaternion keepR = p.transform.rotation;
+        if (restRelative)
+        {
+            p.transform.SetPositionAndRotation(par.Xform.Apply(p.def.pos - par.def.pos), par.transform.rotation);
+            p.rb.position = p.transform.position; p.rb.rotation = p.transform.rotation;
+            Physics.SyncTransforms();
+        }
         var j = p.gameObject.AddComponent<ConfigurableJoint>();
-        j.connectedBody = p.parentPart.rb;
-        j.autoConfigureConnectedAnchor = true;
+        j.connectedBody = par.rb;
+        j.autoConfigureConnectedAnchor = false;
         j.anchor = jd.anchor - p.def.pos;
+        j.connectedAnchor = jd.anchor - par.def.pos;
         j.xMotion = j.yMotion = j.zMotion = ConfigurableJointMotion.Locked;
         j.projectionMode = JointProjectionMode.PositionAndRotation;
         j.projectionDistance = 0.02f;
@@ -353,8 +371,8 @@ public partial class Dummy : MonoBehaviour
             j.angularXMotion = ConfigurableJointMotion.Limited;
             j.angularYMotion = ConfigurableJointMotion.Locked;
             j.angularZMotion = ConfigurableJointMotion.Locked;
-            j.lowAngularXLimit = new SoftJointLimit { limit = Mathf.Clamp(lo * Mathf.Rad2Deg + hingeShiftDeg, -177f, 177f) };
-            j.highAngularXLimit = new SoftJointLimit { limit = Mathf.Clamp(hi * Mathf.Rad2Deg + hingeShiftDeg, -177f, 177f) };
+            j.lowAngularXLimit = new SoftJointLimit { limit = Mathf.Clamp(lo * Mathf.Rad2Deg, -177f, 177f) };
+            j.highAngularXLimit = new SoftJointLimit { limit = Mathf.Clamp(hi * Mathf.Rad2Deg, -177f, 177f) };
         }
         else
         {
@@ -371,6 +389,12 @@ public partial class Dummy : MonoBehaviour
             j.angularZLimit = new SoftJointLimit { limit = sw };
         }
         p.joint = j;
+        if (restRelative)
+        {
+            p.transform.SetPositionAndRotation(keepP, keepR);
+            p.rb.position = keepP; p.rb.rotation = keepR;
+            Physics.SyncTransforms();
+        }
     }
 
     float ComputeChainInertia(DummyPart p)

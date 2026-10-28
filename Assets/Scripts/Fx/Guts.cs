@@ -26,6 +26,20 @@ public static class Guts
         Game.LogEvent($"[b]EVISCERAÇÃO:[/b] vísceras expostas — {part.def.name}", new Color(1, 0.35f, 0.3f));
     }
 
+    /// Pedaços dos órgãos destruídos da parte saindo do corpo (tronco aberto por explosão ou corte).
+    public static void Eject(DummyPart part, Vector3 posW, Vector3 nrmW, int max)
+    {
+        int n = 0;
+        foreach (var o in part.organs)
+        {
+            if (n >= max) break;
+            if (!o.destroyed && o.hp > o.max * 0.4f) continue;
+            Chunk(posW + nrmW * 0.03f + U.RandomUnit() * 0.03f, (nrmW + U.RandomUnit() * 0.5f).normalized, false, part, o.def.color);
+            n++;
+        }
+        for (; n < max; n++) Chunk(posW + nrmW * 0.03f, (nrmW + U.RandomUnit() * 0.6f).normalized, part.partId == "chest", part);
+    }
+
     static void Intestine(DummyPart part, Vector3 localPos, Vector3 posW, Vector3 nrmW, int segs)
     {
         var go = new GameObject("intestino");
@@ -40,13 +54,13 @@ public static class Guts
         }
     }
 
-    static void Chunk(Vector3 posW, Vector3 nrmW, bool chest, DummyPart part)
+    static void Chunk(Vector3 posW, Vector3 nrmW, bool chest, DummyPart part, Color? tint = null)
     {
         var go = new GameObject("viscera");
         go.layer = Game.LAYER_PROPS;
         var sz = new Vector3(U.RandRange(0.05f, 0.08f), U.RandRange(0.03f, 0.05f), U.RandRange(0.04f, 0.07f));
         var sc = go.AddComponent<SphereCollider>(); sc.radius = sz.y;
-        var colr = chest ? Anatomy.C_LUNG : U.Pick(new[] { Anatomy.C_LIVER, Anatomy.C_STOMACH, Anatomy.C_SPLEEN, Anatomy.C_GUT });
+        var colr = tint ?? (chest ? Anatomy.C_LUNG : U.Pick(new[] { Anatomy.C_LIVER, Anatomy.C_STOMACH, Anatomy.C_SPLEEN, Anatomy.C_GUT }));
         var vis = Prims.Visual("m", Prims.Sphere(0.5f, 1f, 12, 6), Mats.Wet(colr), go.transform);
         vis.transform.localScale = sz * 2f;
         var rb = go.AddComponent<Rigidbody>();

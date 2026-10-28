@@ -127,6 +127,9 @@ public class CutOptions
     public float boneRadius = 0.018f;
     public float irregular = 0.6f;                // 0 = tampa lisa, 1 = carne bem irregular
     public int[] proxMap, distMap;                // por índice de osso: substituto para vértices do lado proximal / distal (-1 = mantém)
+    // osso único para o interior da tampa (anéis e centro) de cada lado; -1 = copia os pesos da borda. No tronco a borda
+    // passa pelas axilas (pesos dos ombros) e o miolo da tampa iria junto com os braços.
+    public int proxCapBone = -1, distCapBone = -1;
 }
 
 public struct CutInfo
@@ -299,6 +302,13 @@ public static class MeshCut
             d.n[center] = nrm;
             if (d.hasColors) d.c[center] = o.boneColor;
             if (d.hasRest) { d.rest[center] = d.v[center]; d.restN[center] = nrm; }
+            int capBone = distSide ? o.distCapBone : o.proxCapBone;
+            if (capBone >= 0 && d.hasBW)
+            {
+                var rigid = new BoneWeight { boneIndex0 = capBone, weight0 = 1f };
+                d.bw[center] = rigid;
+                for (int ri = 1; ri < rings.Count; ri++) foreach (var kvr in rings[ri]) d.bw[kvr.Value] = rigid;
+            }
 
             // arestas: cada aresta a->b da borda ganha o triângulo (b, a, centro) -> aqui, em faixas entre anéis
             foreach (int e in edges)
@@ -323,14 +333,19 @@ public static class MeshCut
         ((long)Mathf.RoundToInt(q.x * 5000f) * 73856093L) ^ ((long)Mathf.RoundToInt(q.y * 5000f) * 19349663L) ^ ((long)Mathf.RoundToInt(q.z * 5000f) * 83492791L);
 
     /// Fura a malha em volta de `center` (faces do lado de `n`, até `radius`); com `cap`, fecha o buraco com um funil de carne.
-    public static bool Crater(MeshData d, Vector3 center, Vector3 n, float radius, CutOptions o, bool cap)
+    /// `bone` >= 0: só fura faces da pele dessa parte (peso >= 0.5 nos três vértices) e prende o funil inteiro nela; sem
+    /// isso, um buraco na axila ou na base do pescoço ligava o tronco ao braço/cabeça e a tampa virava "fita" quando eles
+    /// se separavam (pendência 07-A).
+    public static bool Crater(MeshData d, Vector3 center, Vector3 n, float radius, CutOptions o, bool cap, int bone = -1)
     {
         var tr = d.tris; int nt = tr.Count / 3;
         var remove = new bool[nt]; int any = 0;
+        int n0 = d.Count;
         for (int t = 0; t < nt; t++)
         {
             Vector3 a = d.v[tr[t * 3]], b = d.v[tr[t * 3 + 1]], c = d.v[tr[t * 3 + 2]];
             if (((a + b + c) / 3f - center).sqrMagnitude > radius * radius) continue;
+            if (bone >= 0 && d.hasBW && (WeightOn(d.bw[tr[t * 3]], bone) < 0.5f || WeightOn(d.bw[tr[t * 3 + 1]], bone) < 0.5f || WeightOn(d.bw[tr[t * 3 + 2]], bone) < 0.5f)) continue;
             if (Vector3.Dot(Vector3.Cross(b - a, c - a).normalized, n) < 0.2f) continue;
             remove[t] = true; any++;
         }
@@ -359,9 +374,21 @@ public static class MeshCut
             var info = new CutInfo();
             o.capNormal = n;
             AddCap(d, kept, boundary, new List<bool>(), false, o, ref info);
+            if (bone >= 0 && d.hasBW)
+                for (int i = n0; i < d.Count; i++) d.bw[i] = new BoneWeight { boneIndex0 = bone, weight0 = 1f };
         }
         d.tris.Clear(); d.tris.AddRange(kept);
         return true;
+    }
+
+    public static float WeightOn(BoneWeight w, int bone)
+    {
+        float s = 0f;
+        if (w.boneIndex0 == bone) s += w.weight0;
+        if (w.boneIndex1 == bone) s += w.weight1;
+        if (w.boneIndex2 == bone) s += w.weight2;
+        if (w.boneIndex3 == bone) s += w.weight3;
+        return s;
     }
 
     static BoneWeight Remap(BoneWeight w, int[] map)

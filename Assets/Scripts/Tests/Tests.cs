@@ -897,3 +897,96 @@ public class WoundTest : MonoBehaviour
         yield return null;
     }
 }
+
+/// Explosão perto e grudada no boneco (--blasttest --shots-blast=<pasta>): pendência 07. Mede o esticamento da pele
+/// (membros que viram "fitas") e se o tronco abriu; falha com critério numérico.
+public class BlastTest : MonoBehaviour
+{
+    int fails;
+    void Check(bool ok, string what) { Debug.Log((ok ? "  OK    " : "  FALHA ") + what); if (!ok) fails++; }
+
+    IEnumerator Start()
+    {
+        yield return new WaitForSeconds(0.6f);
+        string dir = "";
+        foreach (var a in System.Environment.GetCommandLineArgs()) if (a.StartsWith("--shots-blast=")) dir = a.Substring(14);
+        Camera cam = null;
+        if (dir != "")
+        {
+            Directory.CreateDirectory(dir);
+            var go = new GameObject("blastcam"); cam = go.AddComponent<Camera>();
+            cam.fieldOfView = 50; cam.nearClipPlane = 0.03f; go.AddComponent<MirrorCamera>(); cam.depth = 10;
+        }
+        var cases = new (string name, string part, Vector3 local, float power, int runs)[]
+        {
+            ("controle_arremesso", "chest", Vector3.zero, 0f, 2),     // sem corte: quanto a pele estica só com a pose
+            ("c4_peito", "chest", new Vector3(0f, 0.02f, 0.13f), 2.3f, 3),
+            ("c4_coxa", "thigh_l", new Vector3(0f, 0f, 0.08f), 2.3f, 2),
+            ("c4_barriga", "abdomen", new Vector3(0f, 0f, 0.12f), 2.3f, 2),
+            ("granada_pes", "foot_r", new Vector3(0.25f, -0.05f, 0.2f), 1f, 2),
+            ("c4_braco", "upper_arm_r", new Vector3(0f, 0f, 0.06f), 2.3f, 2),
+            ("c4_cabeca", "head", new Vector3(0f, 0f, 0.11f), 2.3f, 2),
+        };
+        foreach (var cs in cases)
+            for (int run = 0; run < cs.runs; run++)
+            {
+                foreach (var od in Game.dummies) if (od) Destroy(od.gameObject);
+                Game.dummies.Clear();
+                Game.blood.ClearAll();
+                var d = Game.main.SpawnDummy(new Vector3(0f, 0.005f, -5.5f), Quaternion.identity);
+                d.holdStill = true;
+                yield return new WaitForSeconds(0.5f);
+                var p = d.parts[cs.part];
+                var at = p.Xform.Apply(cs.local);
+                string tag = $"{cs.name}#{run}";
+                if (cam != null && run == 0) yield return Snap(cam, d.Center(), new Vector3(1.8f, 0.6f, 2.4f), dir, cs.name + "_0antes");
+                if (cs.power <= 0f)
+                {
+                    d.holdStill = false; d.Collapse();
+                    foreach (var q in d.ValidParts()) q.rb.AddForce((U.RandomUnit() * 6f + Vector3.up * 4f) * q.mass, ForceMode.Impulse);
+                }
+                else if (cs.power < 2f) Explosions.Explode(at, cs.power, 7f, 70, "Granada");
+                else Explosions.Explode(at, cs.power, 9f, 25, "C4");
+                float worst = 0f, gap = 0f; int worstBad = 0;
+                for (int k = 0; k < 12; k++)
+                {
+                    yield return new WaitForSeconds(0.25f);
+                    float s = d.SkinStretch(out int bad);
+                    if (s > worst) { worst = s; worstBad = bad; }
+                    foreach (var q in d.ValidParts())
+                        if (q.parentPart && q.joint != null && q.def.joint != null)
+                        {
+                            var anc = q.def.joint.anchor;
+                            gap = Mathf.Max(gap, Vector3.Distance(q.parentPart.Xform.Apply(anc - q.parentPart.def.pos), q.Xform.Apply(anc - q.def.pos)));
+                        }
+                }
+                Debug.Log($"[explosão] {tag}: junta aberta máx={gap * 100f:F1} cm");
+                int frags = 0, cut = 0, gone = 0; var names = new List<string>();
+                foreach (var kv in d.parts)
+                {
+                    var q = kv.Value; if (!q) continue;
+                    if (q.fragment) frags++;
+                    if (q.destroyed) { gone++; names.Add(kv.Key + "(destr)"); }
+                    else if (q.cutHere) { cut++; names.Add(kv.Key + "(corte)"); }
+                }
+                Debug.Log($"[explosão] {tag}: esticamento máx={worst:F1}x (triângulos em fita: {worstBad}) fragmentos={frags} cortes={cut} destruídas={gone} [{string.Join(", ", names)}] {d.StatusText()}");
+                Check(worstBad == 0, $"{tag}: pele sem fitas ({worstBad} triângulos com aresta > 12 cm esticada > 4x; máx {worst:F1}x)");
+                if (cam != null && run == 0)
+                {
+                    var c = d.parts["pelvis"].transform.position;
+                    yield return Snap(cam, c, new Vector3(1.8f, 1.4f, 2.0f), dir, cs.name + "_1depois");
+                    yield return Snap(cam, c, new Vector3(-1.6f, 2.0f, -1.2f), dir, cs.name + "_2cima");
+                }
+            }
+        Debug.Log($"== EXPLOSÃO: {fails} falha(s)");
+        Application.Quit();
+    }
+
+    static IEnumerator Snap(Camera cam, Vector3 center, Vector3 off, string dir, string name)
+    {
+        cam.transform.position = center + off; cam.transform.rotation = Quaternion.LookRotation(center - cam.transform.position);
+        yield return new WaitForEndOfFrame();
+        ScreenCapture.CaptureScreenshot(Path.Combine(dir, name + ".png"));
+        yield return null;
+    }
+}

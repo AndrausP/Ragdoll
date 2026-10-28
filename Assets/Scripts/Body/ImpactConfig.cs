@@ -13,4 +13,9 @@ public static class ImpactConfig
     // limites para cair
     public const float PAIN_COLLAPSE = 1.45f, PAIN_HOLD_TIME = 1.2f, CONSCIOUS_COLLAPSE = 0.55f, BLOOD_LOSS_COLLAPSE = 0.35f;
     public const float CONCUSSION_COLLAPSE = 0.7f, BRAIN_HP_COLLAPSE = 0.7f;
+    // amputação por explosão (pendência 07 / plano B3): só arranca o membro se ESTA explosão, sozinha, passar de
+    // BLAST_TEAR_FRAC da vida da parte; mesmo assim com chance BLAST_TEAR_CHANCE. Abaixo disso o membro fica destroçado,
+    // preso ao corpo. Tronco: abre com dano >= TORSO_OPEN_DMG e parte com >= TORSO_SPLIT_DMG (intensidade alta).
+    public const float BLAST_TEAR_FRAC = 1.1f, BLAST_TEAR_CHANCE = 0.8f;
+    public const float TORSO_OPEN_DMG = 150f, TORSO_SPLIT_DMG = 240f, TORSO_SPLIT_INTENSITY = 0.75f;
 }

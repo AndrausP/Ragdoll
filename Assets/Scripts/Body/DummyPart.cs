@@ -36,7 +36,7 @@ public class DummyPart : MonoBehaviour
     public Vector3 lastVel;
     public Wound stumpParentWound;
     // "metadados" do Godot
-    public float wall; public int guts;
+    public float wall; public int guts, blastHoles;
     public bool hasStump; public Vector3 stumpLocal, stumpNormal;
     public Material bandageMat;
     public float burn, onFire, burnWoundAt = 0.15f;     // fogo: dose acumulada, segundos ainda queimando, próxima queimadura visível

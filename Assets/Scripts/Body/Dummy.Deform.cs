@@ -98,8 +98,8 @@ public partial class Dummy
         if (crater && craterR > 0f)
         {
             var opt = new CutOptions { capDepth = Mathf.Min(0.03f, craterR * 1.1f), irregular = 1f };
-            MeshCut.Crater(bodyData, at, n, craterR, opt, true);
-            if (clothData != null) MeshCut.Crater(clothData, at, n, craterR * 1.45f, new CutOptions(), false);
+            MeshCut.Crater(bodyData, at, n, craterR, opt, true, p.boneIndex);
+            if (clothData != null) MeshCut.Crater(clothData, at, n, craterR * 1.45f, new CutOptions(), false, p.boneIndex);
             meshTopoDirty = true;
         }
     }

@@ -261,7 +261,8 @@ public partial class Dummy
             WallDamage(p, 90f * intensity * power, lc * p.PartRadius(), lc);
         }
         p.impactGrace = 0.4f;
-        cutHint = p.transform.position; cutRagged = 1f;
+        // o membro rasga mais perto da explosão: ponto entre o centro da peça e o ponto do eixo mais próximo do centro
+        cutHint = Vector3.Lerp(p.transform.position, p.col.ClosestPoint(centerW), 0.6f) + U.RandomUnit() * 0.03f; cutRagged = 1f;
         acutePain += 0.1f * push;
         if (p.Freeze)
         {
@@ -310,9 +311,12 @@ public partial class Dummy
             if (p.wounds.Count > 0) p.wounds[p.wounds.Count - 1].internalBleed += o.def.bleed * 0.4f;
         }
         if (p.partId == "head") concussion = Mathf.Min(1f, concussion + intensity * power);
+        if (p.partId == "abdomen" || p.partId == "pelvis" || p.partId == "chest") TorsoBlast(p, centerW, dir, intensity, dmg);
         if (summary.Count > 0) Game.LogEvent($"{nm} → {p.def.name}: {string.Join(", ", summary)}", new Color(1, 0.6f, 0.3f));
         if (p.def.severable && !p.cutHere)
         {
+            bool tear = dmg * (p.IsLimb() ? 0.9f : 0.35f) >= p.maxHp * ImpactConfig.BLAST_TEAR_FRAC && U.Randf() < ImpactConfig.BLAST_TEAR_CHANCE;
+            if (p.hp <= 0f && !tear && !p.def.leaf) p.hp = 1f;       // destroçado, mas ainda preso
             if (p.hp <= 0f)
             {
                 if (p.def.leaf && p.hp < -p.maxHp * 0.8f) DestroyPart(p, dir);
@@ -330,6 +334,13 @@ public partial class Dummy
         if (p.cutHere || p.destroyed || p.parentPart == null) return;
         if (state == State.STANDING) Collapse();
         bool wasAttached = !p.severed;
+        if (p.meshDetached)
+        {
+            // dentro de um fragmento e sem como cortar a pele de novo (pedaço curto): a parte sai como peça rígida e a
+            // pele contínua encolhe no coto, como no corte na junta; os pesos divididos vão inteiros para um dos lados
+            SnapWeightsOff(p);
+            foreach (var c in Chain(p)) c.meshDetached = false;
+        }
         if (p.joint != null) { Destroy(p.joint); p.joint = null; }
         p.cutHere = true;
         float lost = 0f;
@@ -337,7 +348,7 @@ public partial class Dummy
         {
             if (wasAttached && !c.destroyed) lost += c.limbBlood;
             c.severed = true;
-            if (skinBody && !c.destroyed) c.bodyMesh.SetActive(true);
+            if (skinBody && !c.destroyed && !c.meshDetached) c.bodyMesh.SetActive(true);
             c.Freeze = false;
             c.pressure = 0f;
         }
@@ -380,7 +391,13 @@ public partial class Dummy
     {
         if (p.destroyed) return;
         if (!p.cutHere) SeverPart(p, dirW);
+        // depois de um corte de malha a parte continua presa ao fragmento por junta: congelada, seguraria o
+        // fragmento no ar e a pele esticaria até ela (pendência 07-A)
+        if (p.joint != null) { Destroy(p.joint); p.joint = null; }
+        foreach (var c in p.childrenParts)
+            if (c && c.joint != null && !c.cutHere) { Destroy(c.joint); c.joint = null; c.cutHere = true; c.severed = true; c.Freeze = false; }
         p.destroyed = true;
+        SnapWeightsOff(p);
         var pos = p.transform.position;
         Game.blood.Gibs(pos, (int)(p.mass * 3f) + 5, dirW, p.partId == "head");
         Game.blood.Mist(pos, dirW, 3f);

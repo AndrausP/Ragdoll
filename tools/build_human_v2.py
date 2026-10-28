@@ -129,11 +129,15 @@ def build_segments(heads, names, anat, s, t=0.6):
     hips_t = (A('thigh_l') + A('thigh_r')) / 2
     chain_src = [hips, h['spine04'], h['spine02'], h['neck01'], h['head']]
     chain_tgt = [hips_t, A('abdomen'), A('chest'), A('neck'), A('head')]
+    # a cadeia física é toda vertical; o corpo real tem cifose torácica e a cabeça fica à frente dos ombros.
+    # Sem isto o peito projeta e a cabeça fica recuada ("peito de pombo"). Só visual: deslocamentos de 1-3 cm.
+    chain_tgt[3] = chain_tgt[3] + np.array([0, 0, 0.014])
+    chain_tgt[4] = chain_tgt[4] + np.array([0, 0, 0.036])
     k = slide_knots(chain_src, chain_tgt, t)
     for i, pid in enumerate(['pelvis', 'abdomen', 'chest', 'neck']):
         seg[pid] = Segment(k[i], k[i + 1], chain_tgt[i], chain_tgt[i + 1], s)
     top = h['head'] + np.array([0, 0.152, -0.007])
-    seg['head'] = Segment(h['head'], top, A('head'), A('head') + np.array([0, 0.146, 0]), s)
+    seg['head'] = Segment(h['head'], top, chain_tgt[4], chain_tgt[4] + np.array([0, 0.146, 0.004]), s)
     for sd, L in (('_l', 'L'), ('_r', 'R')):
         # braço: ombro -> cotovelo -> punho
         ks = slide_knots([h['upperarm01.' + L], h['lowerarm01.' + L], h['wrist.' + L]], [A('upper_arm' + sd), A('forearm' + sd), A('hand' + sd)], t)

@@ -417,3 +417,250 @@ public class Shots : MonoBehaviour
         Application.Quit();
     }
 }
+
+/// Agonia (--agonytest): um boneco leva tiros no abdômen e na coxa e agoniza por até 60 s; mede estabilidade da física
+/// (velocidade, junta aberta) e conta espasmos e suspiros; com --shots-agony=<pasta> tira capturas laterais.
+public class AgonyTest : MonoBehaviour
+{
+    IEnumerator Start()
+    {
+        yield return new WaitForSeconds(0.6f);
+        var d = Game.dummies[0];
+        string dir = "";
+        foreach (var a in System.Environment.GetCommandLineArgs()) if (a.StartsWith("--shots-agony=")) dir = a.Substring(14);
+        Camera cam = null;
+        if (dir != "")
+        {
+            Directory.CreateDirectory(dir);
+            var go = new GameObject("agonycam"); cam = go.AddComponent<Camera>();
+            cam.fieldOfView = 55; cam.nearClipPlane = 0.03f; go.AddComponent<MirrorCamera>(); cam.depth = 10;
+        }
+        var pw = Weapons.ById("pistol");
+        foreach (var (pid, loc) in new[] { ("abdomen", new Vector3(0.03f, 0f, 0.1f)), ("thigh_l", new Vector3(0.0f, 0.05f, 0.05f)), ("abdomen", new Vector3(-0.04f, 0.02f, 0.1f)) })
+        {
+            var part = d.parts[pid]; var tgt = part.Xform.Apply(loc); var from = tgt + new Vector3(0, 0.2f, 2.5f);
+            Weapons.FireRay(from, (tgt - from).normalized, pw.energy, pw.prof, null);
+            yield return new WaitForSeconds(0.15f);
+        }
+        // contorcer consciente (ação "writhe"), outro boneco: mede estabilidade da física por 8 s
+        var w = Game.dummies[1];
+        w.paralysis = "paraplegia";      // não consegue se levantar: fica no chão
+        w.Collapse(); yield return new WaitForSeconds(1.2f);
+        w.pain = 1.2f; w.DebugAction("writhe", "writhe_a", 9f);
+        float wv = 0, wg = 0; var series = new List<float>();
+        for (int i = 0; i < 80; i++)
+        {
+            yield return new WaitForSeconds(0.1f);
+            float step = 0;
+            foreach (var p in w.ValidParts())
+            {
+                step = Mathf.Max(step, p.rb.linearVelocity.magnitude);
+                wv = Mathf.Max(wv, p.rb.linearVelocity.magnitude);
+                if (p.parentPart && !p.severed && p.def.joint != null)
+                {
+                    var anc = p.def.joint.anchor;
+                    wg = Mathf.Max(wg, Vector3.Distance(p.parentPart.Xform.Apply(anc - p.parentPart.def.pos), p.Xform.Apply(anc - p.def.pos)));
+                }
+            }
+            series.Add(step);
+            if (cam != null && (i == 15 || i == 40 || i == 65))
+            {
+                var c = w.parts["pelvis"].transform.position;
+                cam.transform.position = c + new Vector3(1.6f, 1.0f, 1.3f); cam.transform.rotation = Quaternion.LookRotation(c - cam.transform.position);
+                yield return new WaitForEndOfFrame();
+                ScreenCapture.CaptureScreenshot(Path.Combine(dir, $"contorcer_{i}.png"));
+            }
+        }
+        series.Sort(); int fr = 0; foreach (var p in w.ValidParts()) foreach (var b in p.bones) if (b.fractured) fr++;
+        Debug.Log($"== CONTORCER: {(Game.legacyAgony ? "ANTIGA" : "NOVA")} vmax {wv:F1} m/s, p50 {series[series.Count / 2]:F1}, p95 {series[(int)(series.Count * 0.95f)]:F1}, junta aberta máx {wg:F3} m, ossos fraturados {fr}, estado {w.StatusText()}");
+        d.blood = 3000f;      // hemorragia grave: começa já na fase em que espasmos e suspiros aparecem
+        float t = 0, vmaxAll = 0, gapAll = 0, nextLog = 0; int shot = 0;
+        float[] shotAt = { 3f, 10f, 18f, 26f, 36f, 46f };
+        while (t < 60f && !d.dead)
+        {
+            yield return new WaitForSeconds(0.1f); t += 0.1f;
+            float vmax = 0, wmax = 0, gap = 0;
+            foreach (var p in d.ValidParts())
+            {
+                vmax = Mathf.Max(vmax, p.rb.linearVelocity.magnitude); wmax = Mathf.Max(wmax, p.rb.angularVelocity.magnitude);
+                if (p.parentPart && !p.severed && p.def.joint != null)
+                {
+                    var anc = p.def.joint.anchor;
+                    gap = Mathf.Max(gap, Vector3.Distance(p.parentPart.Xform.Apply(anc - p.parentPart.def.pos), p.Xform.Apply(anc - p.def.pos)));
+                }
+            }
+            vmaxAll = Mathf.Max(vmaxAll, vmax); gapAll = Mathf.Max(gapAll, gap);
+            if (t >= nextLog)
+            {
+                nextLog += 2f;
+                Debug.Log($"[agonia] t={t:F0}s {d.StatusText()} sangue={(int)d.blood} consc={d.consciousness:F2} {d.AgonyDebug} vmax={vmax:F1} wmax={wmax:F1} junta={gap:F3}");
+            }
+            if (cam != null && shot < shotAt.Length && t >= shotAt[shot])
+            {
+                var c = d.parts["pelvis"].transform.position;
+                cam.transform.position = c + new Vector3(1.8f, 1.1f, 1.4f); cam.transform.rotation = Quaternion.LookRotation(c - cam.transform.position);
+                yield return new WaitForEndOfFrame();
+                ScreenCapture.CaptureScreenshot(Path.Combine(dir, $"agonia_{shot}.png"));
+                shot++;
+            }
+        }
+        if (d.dead) { Debug.Log($"[agonia] morreu aos {t:F1}s: {d.deathCause}"); for (int i = 0; i < 40; i++) yield return new WaitForSeconds(0.1f); }
+        Debug.Log($"== AGONIA: duração {t:F1}s, espasmos {d.spasmCount}, suspiros {d.gaspCount}, vmax {vmaxAll:F1} m/s, junta aberta máx {gapAll:F3} m, morto={d.dead}");
+        Application.Quit();
+    }
+}
+
+/// Marcha (--gaittest --shots-gait=<pasta>): um boneco anda e corre em linha reta; capturas laterais de um ciclo e
+/// medidas do tronco (inclinação, avanço do peito em relação à pelve, balanço vertical).
+public class GaitTest : MonoBehaviour
+{
+    IEnumerator Start()
+    {
+        yield return new WaitForSeconds(0.6f);
+        string dir = "";
+        foreach (var a in System.Environment.GetCommandLineArgs()) if (a.StartsWith("--shots-gait=")) dir = a.Substring(13);
+        Camera cam = null;
+        if (dir != "")
+        {
+            Directory.CreateDirectory(dir);
+            var go = new GameObject("gaitcam"); cam = go.AddComponent<Camera>();
+            cam.fieldOfView = 38; cam.nearClipPlane = 0.03f; go.AddComponent<MirrorCamera>(); cam.depth = 10;
+        }
+        var d = Game.main.SpawnDummy(new Vector3(3.5f, 0.005f, -6f), Quaternion.identity);
+        d.holdStill = false;
+        foreach (var (name, spd) in new[] { ("parado", 0f), ("andar", 1.3f), ("correr", 3.2f) })
+        {
+            d.DebugWalk(spd);
+            yield return new WaitForSeconds(name == "parado" ? 1f : 2.2f);
+            float lean = 0, lean2 = 0, fwd = 0, head = 0, bobMin = 9, bobMax = -9; int n = 0;
+            int shot = 0;
+            for (int i = 0; i < 20; i++)
+            {
+                yield return new WaitForSeconds(0.06f);
+                var pel = d.parts["pelvis"].transform; var ch = d.parts["chest"].transform; var hd = d.parts["head"].transform; var nk = d.parts["neck"].transform;
+                var up = ch.rotation * Vector3.up;
+                var fw = d.transform.rotation * Vector3.forward; fw = new Vector3(Mathf.Sin(0f), 0, 1f);
+                float tilt = Mathf.Atan2(Vector3.Dot(up, fw), up.y) * Mathf.Rad2Deg;                       // + = tronco inclinado para a frente
+                float tilt2 = Mathf.Atan2(Vector3.Dot(pel.rotation * Vector3.up, fw), (pel.rotation * Vector3.up).y) * Mathf.Rad2Deg;
+                lean += tilt; lean2 += tilt2; n++;
+                fwd += Vector3.Dot(ch.position - pel.position, fw);
+                head += Vector3.Dot(hd.position - ch.position, fw);
+                bobMin = Mathf.Min(bobMin, pel.position.y); bobMax = Mathf.Max(bobMax, pel.position.y);
+                if (cam != null && name != "parado" && i % 3 == 0 && shot < 6)
+                {
+                    var c = pel.position;
+                    cam.transform.position = new Vector3(c.x - 3.4f, 0.95f, c.z); cam.transform.rotation = Quaternion.LookRotation(new Vector3(c.x, 0.95f, c.z) - cam.transform.position);
+                    yield return new WaitForEndOfFrame();
+                    ScreenCapture.CaptureScreenshot(Path.Combine(dir, $"{name}_{shot}.png"));
+                    shot++;
+                }
+            }
+            Debug.Log($"[marcha] {name}: v={d.GaitSpeed:F2} m/s, tronco inclinado {lean / n:F1} graus, pelve {lean2 / n:F1} graus, peito-pelve {fwd / n * 100:F1} cm à frente, cabeça-peito {head / n * 100:F1} cm, pelve sobe/desce {(bobMax - bobMin) * 100:F1} cm");
+        }
+        Debug.Log("== MARCHA fim");
+        Application.Quit();
+    }
+}
+
+/// Armadilhas (--hazardtest --shots-hazard=<pasta>): coloca um boneco em cada máquina, aciona e mede o resultado
+/// (partes cortadas/destruídas, ossos fraturados, sangue perdido); capturas antes e depois.
+public class HazardTest : MonoBehaviour
+{
+    static void Teleport(Dummy d, Vector3 pivotFrom, Vector3 pivotTo, float yawDeg)
+    {
+        var rot = Quaternion.AngleAxis(yawDeg, Vector3.up);
+        foreach (var p in d.ValidParts())
+        {
+            var np = pivotTo + rot * (p.rb.position - pivotFrom);
+            p.rb.position = np; p.transform.position = np;
+            var nr = rot * p.rb.rotation; p.rb.rotation = nr; p.transform.rotation = nr;
+            p.rb.linearVelocity = Vector3.zero; p.rb.angularVelocity = Vector3.zero;
+        }
+    }
+
+    /// Deita o boneco (caído e imóvel) com o ponto `anchorPart` em `target`, com o eixo pelve-peito ao longo de `along` (horizontal).
+    static IEnumerator Lay(Dummy d, string anchorPart, Vector3 target, Vector3 along)
+    {
+        d.Collapse();
+        yield return new WaitForSeconds(1.6f);
+        var a = d.parts[anchorPart].rb.position;
+        var axis = d.parts["pelvis"].rb.position - d.parts["chest"].rb.position; axis.y = 0;
+        float yaw = axis.sqrMagnitude < 1e-4f ? 0f : Vector3.SignedAngle(axis, along, Vector3.up);
+        Teleport(d, a, target, yaw);
+    }
+
+    static string Summary(Dummy d)
+    {
+        int cut = 0, gone = 0, fr = 0;
+        var names = new List<string>();
+        foreach (var kv in d.parts)
+        {
+            var p = kv.Value; if (!p) continue;
+            if (p.destroyed) { gone++; names.Add(kv.Key + "(destruída)"); }
+            else if (p.cutHere) { cut++; names.Add(kv.Key + "(cortada)"); }
+            foreach (var b in p.bones) if (b.fractured) fr++;
+        }
+        return $"{d.StatusText()} sangue={(int)d.blood} perdido={(int)d.totalLost}ml ossos fraturados={fr} cortes={cut} destruídas={gone} [{string.Join(", ", names)}]";
+    }
+
+    IEnumerator Start()
+    {
+        yield return new WaitForSeconds(0.8f);
+        string dir = "";
+        foreach (var a in System.Environment.GetCommandLineArgs()) if (a.StartsWith("--shots-hazard=")) dir = a.Substring(15);
+        Camera cam = null;
+        if (dir != "")
+        {
+            Directory.CreateDirectory(dir);
+            var go = new GameObject("hazcam"); cam = go.AddComponent<Camera>();
+            cam.fieldOfView = 55; cam.nearClipPlane = 0.03f; go.AddComponent<MirrorCamera>(); cam.depth = 10;
+        }
+        float z = 24f;
+        var plans = new (string name, Vector3 center, Vector3 camOff, System.Func<Dummy, IEnumerator> place, float wait)[]
+        {
+            ("guilhotina", new Vector3(-26f, 1.3f, z), new Vector3(3.2f, 1.3f, -2.6f), d => Lay(d, "neck", new Vector3(-26f, 1.25f, z + 0.02f), Vector3.forward), 5f),
+            ("prensa", new Vector3(-18f, 0.6f, z), new Vector3(3.2f, 1.6f, -3.2f), d => Lay(d, "chest", new Vector3(-18f, 0.62f, z), Vector3.forward), 9f),
+            ("serra", new Vector3(-10f, 1.1f, z), new Vector3(3.4f, 1.6f, -2.6f), d => Lay(d, "chest", new Vector3(-10f, 1.12f, z), Vector3.forward), 11f),
+            ("martelo", new Vector3(10f, 1.3f, z), new Vector3(0f, 1.5f, -4.5f), d => Standing(d, new Vector3(8.4f, 0.005f, z), 90f), 7f),
+            ("espinhos", new Vector3(18f, 0.4f, z), new Vector3(3.0f, 1.4f, -2.8f), d => Lay(d, "chest", new Vector3(18f, 0.2f, z), Vector3.forward), 6f),
+            ("lanca-chamas", new Vector3(26f, 1.2f, z), new Vector3(3.2f, 1.6f, -2.2f), d => Standing(d, new Vector3(26f, 0.005f, z - 2.4f), 0f), 6f),
+        };
+        foreach (var pl in plans)
+        {
+            var d = Game.main.SpawnDummy(new Vector3(pl.center.x, 0.005f, z - 5f), Quaternion.identity);
+            yield return new WaitForSeconds(0.3f);
+            yield return pl.place(d);
+            yield return new WaitForSeconds(0.5f);
+            Hazard hz = null;
+            foreach (var h in Hazard.All) if (Vector3.Distance(h.transform.position, new Vector3(pl.center.x, 0, z)) < 1.5f) hz = h;
+            if (hz == null) { Debug.Log($"[armadilha] {pl.name}: NÃO ENCONTRADA"); continue; }
+            if (cam != null) yield return Snap(cam, pl.center, pl.camOff, dir, pl.name + "_0");
+            hz.Trigger();
+            float t = 0; bool shot = false;
+            while (t < pl.wait)
+            {
+                yield return new WaitForSeconds(0.25f); t += 0.25f;
+                if (cam != null && !shot && t >= pl.wait * 0.5f) { shot = true; yield return Snap(cam, pl.center, pl.camOff, dir, pl.name + "_1"); }
+            }
+            if (cam != null) yield return Snap(cam, pl.center, pl.camOff, dir, pl.name + "_2");
+            Debug.Log($"[armadilha] {pl.name}: golpes={hz.hitsDealt} | {Summary(d)}");
+        }
+        Debug.Log("== ARMADILHAS fim");
+        Application.Quit();
+    }
+
+    static IEnumerator Standing(Dummy d, Vector3 pos, float yaw)
+    {
+        d.holdStill = true;
+        d.PlaceStanding(pos, yaw);
+        yield return new WaitForSeconds(0.3f);
+    }
+
+    static IEnumerator Snap(Camera cam, Vector3 center, Vector3 off, string dir, string name)
+    {
+        cam.transform.position = center + off; cam.transform.rotation = Quaternion.LookRotation(center - cam.transform.position);
+        yield return new WaitForEndOfFrame();
+        ScreenCapture.CaptureScreenshot(Path.Combine(dir, name + ".png"));
+        yield return null;
+    }
+}

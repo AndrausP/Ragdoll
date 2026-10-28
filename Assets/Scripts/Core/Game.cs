@@ -23,7 +23,8 @@ public static class Game
     public static bool xray;
     public static bool autotest;
     public static string shotsDir = "";
-    public static bool physTest, stressTest;
+    public static bool physTest, stressTest, agonyTest, gaitTest, hazardTest;
+    public static bool legacyAgony;      // --agony=legacy: agonia antiga (duas poses alternadas, sem reflexos), para comparar
     static bool? bodyV2;      // argumento de linha de comando; sem ele vale a preferência salva
 
     public static event Action<string, Color> EventLogged;
@@ -37,12 +38,16 @@ public static class Game
             else if (a.StartsWith("--shots=")) shotsDir = a.Substring(8);
             else if (a == "--phystest") physTest = true;
             else if (a == "--stress") stressTest = true;
+            else if (a == "--agonytest") agonyTest = true;
+            else if (a == "--gaittest") gaitTest = true;
+            else if (a == "--hazardtest") hazardTest = true;
+            else if (a == "--agony=legacy") legacyAgony = true;
             else if (a == "--body=v2") bodyV2 = true;
             else if (a == "--body=v1") bodyV2 = false;
         }
         MeshStore.SelectBody(bodyV2 ?? PlayerPrefs.GetInt("corpo_v2", 1) == 1);
         // testes automáticos e capturas rodam sem som
-        AudioListener.volume = autotest || physTest || stressTest || shotsDir != "" ? 0f : 1f;
+        AudioListener.volume = autotest || physTest || stressTest || agonyTest || gaitTest || hazardTest || shotsDir != "" ? 0f : 1f;
         // matriz de colisão = máscaras do Godot
         for (int i = 0; i < 32; i++)
             Physics.IgnoreLayerCollision(LAYER_PLAYER, i, i != LAYER_WORLD);

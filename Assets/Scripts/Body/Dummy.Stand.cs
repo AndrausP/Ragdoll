@@ -303,6 +303,22 @@ public partial class Dummy
     }
 
     bool walkBackward;
+    float debugSpeed = -1f;
+
+    /// Gancho de teste (--gaittest): anda em linha reta à velocidade dada (m/s); negativo desliga.
+    public void DebugWalk(float spd)
+    {
+        debugSpeed = spd;
+        if (spd >= 0f) { goal = standRoot.p + new Vector3(Mathf.Sin(heading), 0, Mathf.Cos(heading)) * 40f; hasGoal = true; }
+    }
+    public float GaitSpeed => speed;
+
+    /// Reposiciona o boneco em pé (testes): move a raiz da pose, que reescreve as partes a cada passo de física.
+    public void PlaceStanding(Vector3 pos, float yawDeg)
+    {
+        standRoot = new Xf(Quaternion.Euler(0, yawDeg, 0), pos);
+        heading = yawDeg * Mathf.Deg2Rad; lastHeading = heading;
+    }
     public bool holdStill;     // capturas de tela: fica parado no lugar
 
     /// Avança a raiz em direção ao objetivo, seguindo o chão e desviando de obstáculos
@@ -420,6 +436,7 @@ public partial class Dummy
         // mente e locomoção (sem andar durante o passo de recuperação)
         float want = Think(dt, out bool clutch, out bool handsUp);
         if (stepT >= 0f) want = 0f;
+        if (debugSpeed >= 0f) { hasGoal = true; want = debugSpeed; }
         Navigate(dt, ref want);
         speed = U.MoveToward(speed, want, dt * (want > speed ? 2.5f : 4f));
         AdvanceRoot(dt);
@@ -455,7 +472,8 @@ public partial class Dummy
         if (flinch.magnitude > 1e-5f) fl = U.Axis(flinch.normalized, Mathf.Clamp(flinch.magnitude, 0f, 0.6f));
         // curva o tronco com dor/desequilíbrio; inclina para a frente ao correr; dobra ao segurar a perna
         float bend = Mathf.Clamp(pain * 0.22f + unsteady * 0.2f + holdWound * 0.12f + run * 0.22f, 0f, 0.5f) + (clutch ? 0.65f : 0f)
-                     + (look != null ? look.slouch : 0f);        // postura própria: uns andam curvados
+                     + (look != null ? look.slouch : 0f)         // postura própria: uns andam curvados
+                     + Mathf.Clamp01(speed / WALK_SPEED) * 0.055f * gaitAmp;   // quem anda inclina o tronco ~3° para a frente
         fl = fl * U.Axis(Vector3.right, bend);
 
         // mãos: segurar a ferida do tronco / as duas mãos na perna / mãos para cima
@@ -507,7 +525,7 @@ public partial class Dummy
                 if (id == kk.Key || IsDescendant(id, kk.Key)) xf = RotAbout(xf, defs[kk.Key].joint.anchor, U.Euler(kk.Value));
             if (id == "head")
             {
-                var idle = U.Axis(Vector3.up, Mathf.Sin(standTime * 0.31f) * 0.25f * (1f - lookBlend)) * U.Axis(Vector3.right, Mathf.Sin(standTime * 0.23f) * 0.06f + pain * 0.2f + (look != null ? look.slouch * 0.7f : 0f))
+                var idle = U.Axis(Vector3.up, Mathf.Sin(standTime * 0.31f) * 0.25f * (1f - lookBlend)) * U.Axis(Vector3.right, Mathf.Sin(standTime * 0.23f) * 0.06f + pain * 0.2f + (look != null ? look.slouch * 0.7f : 0f) - bend * 0.55f)
                            * U.Axis(Vector3.forward, look != null ? look.headTilt : 0f);
                 xf = RotAbout(xf, defs["head"].joint.anchor, Quaternion.Slerp(Quaternion.identity, lookQ, lookBlend * 0.65f) * idle);
             }
@@ -558,10 +576,13 @@ public partial class Dummy
         var shoulder = defs[ua].joint.anchor;
         var elbowRest = defs[fa].joint.anchor;
         // base: balanço do braço (parado) ou oposto à perna (andando/correndo)
-        float walkSwing = Mathf.Sin(armPh + (side == "l" ? 0f : Mathf.PI)) * (0.25f + run * 0.45f) * gaitAmp;
+        float walkSwing = Mathf.Sin(armPh + (side == "l" ? 0f : Mathf.PI)) * (0.36f + run * 0.5f) * gaitAmp;
         var swing = U.Axis(Vector3.right, Mathf.Sin(standTime * 0.9f + sgn) * 0.05f * wob - walkSwing)
                   * U.Axis(new Vector3(0, 0, 1), sgn * (0.04f + unsteady * 0.25f));
-        var elbowBend = U.Axis(Vector3.right, -0.12f - 0.04f * Mathf.Sin(standTime * 0.9f) - unsteady * 0.4f - run * 1.1f * gaitAmp);
+        // cotovelo meio flexionado ao andar e muito ao correr; estica um pouco no balanço para trás
+        float swingPhase = Mathf.Sin(armPh + (side == "l" ? 0f : Mathf.PI));
+        var elbowBend = U.Axis(Vector3.right, -0.12f - 0.04f * Mathf.Sin(standTime * 0.9f) - unsteady * 0.4f - run * 1.1f * gaitAmp
+                                               - gaitAmp * (0.2f + 0.12f * swingPhase));
         Quaternion qs = swing, qe = elbowBend;
         // alvos de IK (em espaço de repouso do tronco)
         Vector3? target = null;

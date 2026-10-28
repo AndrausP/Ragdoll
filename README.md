@@ -38,6 +38,7 @@ O log fica em `%USERPROFILE%\AppData\LocalLow\Andraus\Boneco Gore Sandbox\Player
 | Clique esquerdo / direito | Ação principal / secundária (nas armas de fogo o direito **mira pela arma**) |
 | Q | Recarregar (facas: recolher) |
 | E (segurar) | Agarrar corpo ou membro (clique = arremessar, rodinha = distância) |
+| G | Acionar a armadilha mirada (zona de testes ao fundo: guilhotina, prensa, serra, martelo, espinhos, lança-chamas) |
 | F | Criar boneco na sua frente |
 | R / K | Resetar laboratório / limpar sangue |
 | X | Raio-X (órgãos, ossos, artérias e veias) |

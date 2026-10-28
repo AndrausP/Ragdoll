@@ -133,6 +133,8 @@ public static class MapBuilder
         probe.refreshMode = UnityEngine.Rendering.ReflectionProbeRefreshMode.OnAwake;
         probe.timeSlicingMode = UnityEngine.Rendering.ReflectionProbeTimeSlicingMode.NoTimeSlicing;
         probe.resolution = 128;
+        // zona de testes de armadilhas (guilhotina, prensa, serra, martelo, espinhos, lança-chamas)
+        Hazard.BuildZone(root);
     }
 
     static GameObject Block(Transform root, Vector3 size, Vector3 pos, Material mat)

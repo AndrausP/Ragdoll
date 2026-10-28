@@ -45,6 +45,7 @@ public class Player : MonoBehaviour
 
     public Vector3 HeadPosition => camNode.position;
     Vector3 CamFwd => -(camNode.rotation * Vector3.forward);   // a câmera do Godot olha para -Z
+    public Vector3 AimDirection => CamFwd;
 
     void Awake()
     {

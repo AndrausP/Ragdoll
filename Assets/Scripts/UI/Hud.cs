@@ -155,7 +155,7 @@ public class Hud : MonoBehaviour
         // ajuda
         if (showHelp)
             Shadowed(new Rect(14, 10, 900, 80),
-                "WASD mover · Shift correr · Espaço pular · Ctrl agachar · Mouse mirar · Direito: mirar pela arma\n1-9/0 ou rodinha: armas (repita a tecla para trocar dentro da categoria) · E (segurar): agarrar corpo/membro (clique = arremessar)\nF: novo boneco · R: resetar · K: limpar sangue · X: raio-X (órgãos e ossos) · T: câmera lenta · Q: recarregar\nTab: painel médico · O: configurar mira · H: esconder ajuda · Esc: soltar mouse", sText);
+                "WASD mover · Shift correr · Espaço pular · Ctrl agachar · Mouse mirar · Direito: mirar pela arma\n1-9/0 ou rodinha: armas (repita a tecla para trocar dentro da categoria) · E (segurar): agarrar corpo/membro (clique = arremessar)\nF: novo boneco · R: resetar · K: limpar sangue · X: raio-X (órgãos e ossos) · T: câmera lenta · Q: recarregar\nG: acionar a armadilha mirada (zona de testes ao fundo do galpão) · Tab: painel médico · O: configurar mira · H: esconder ajuda · Esc: soltar mouse", sText);
 
         // modos
         var modes = new List<string>();

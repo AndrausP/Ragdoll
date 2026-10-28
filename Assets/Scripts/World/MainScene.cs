@@ -41,6 +41,9 @@ public class MainScene : MonoBehaviour
         if (Game.shotsDir != "") gameObject.AddComponent<Shots>();
         if (Game.physTest) gameObject.AddComponent<PhysTest>();
         if (Game.stressTest) gameObject.AddComponent<StressTest>();
+        if (Game.agonyTest) gameObject.AddComponent<AgonyTest>();
+        if (Game.hazardTest) gameObject.AddComponent<HazardTest>();
+        if (Game.gaitTest) gameObject.AddComponent<GaitTest>();
     }
 
     void SpawnDefaults()
@@ -80,6 +83,7 @@ public class MainScene : MonoBehaviour
         Flames.ClearAll();
             Game.LogEvent("Sangue limpo", new Color(0.7f, 0.9f, 1f));
         }
+        else if (InputX.Down(InputX.A.Trap)) Hazard.ActivateAimed(Game.player.HeadPosition, Game.player.AimDirection);
         else if (InputX.Down(InputX.A.XRay))
         {
             Game.xray = !Game.xray;

@@ -16,6 +16,35 @@ public class MeshData
 
     public int Count => v.Count;
 
+    // grade espacial (células de 6 cm) para achar os vértices perto de um ponto sem varrer a malha inteira;
+    // reconstruída quando o número de vértices muda (corte, buraco); os amassados só movem vértices alguns mm
+    Dictionary<long, List<int>> grid; int gridCount = -1;
+    const float CELL = 0.06f;
+    static long CellKey(int x, int y, int z) => ((long)(x + 1024) << 40) | ((long)(y + 1024) << 20) | (long)(z + 1024);
+
+    public void Query(Vector3 c, float r, List<int> result)
+    {
+        result.Clear();
+        if (grid == null || gridCount != v.Count)
+        {
+            grid = new Dictionary<long, List<int>>(8192);
+            for (int i = 0; i < v.Count; i++)
+            {
+                long k = CellKey(Mathf.FloorToInt(v[i].x / CELL), Mathf.FloorToInt(v[i].y / CELL), Mathf.FloorToInt(v[i].z / CELL));
+                if (!grid.TryGetValue(k, out var l)) grid[k] = l = new List<int>(16);
+                l.Add(i);
+            }
+            gridCount = v.Count;
+        }
+        int x0 = Mathf.FloorToInt((c.x - r) / CELL), x1 = Mathf.FloorToInt((c.x + r) / CELL);
+        int y0 = Mathf.FloorToInt((c.y - r) / CELL), y1 = Mathf.FloorToInt((c.y + r) / CELL);
+        int z0 = Mathf.FloorToInt((c.z - r) / CELL), z1 = Mathf.FloorToInt((c.z + r) / CELL);
+        for (int x = x0; x <= x1; x++)
+            for (int y = y0; y <= y1; y++)
+                for (int z = z0; z <= z1; z++)
+                    if (grid.TryGetValue(CellKey(x, y, z), out var l)) result.AddRange(l);
+    }
+
     public static MeshData From(Mesh m)
     {
         var d = new MeshData();

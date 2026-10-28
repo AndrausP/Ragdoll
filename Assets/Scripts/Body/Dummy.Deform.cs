@@ -7,6 +7,8 @@ using UnityEngine;
 public partial class Dummy
 {
     bool meshVertsDirty, meshTopoDirty;
+    readonly List<int> nearBuf = new List<int>(512);
+    float lastTopoApply;
 
     void EnsureData()
     {
@@ -18,8 +20,11 @@ public partial class Dummy
     void FlushMesh()
     {
         if (!meshVertsDirty && !meshTopoDirty) return;
+        // a reconstrução completa da malha é cara: junta vários buracos num só envio (no máx. ~8 por segundo)
+        if (meshTopoDirty && Time.unscaledTime - lastTopoApply < 0.12f) return;
         if (meshTopoDirty)
         {
+            lastTopoApply = Time.unscaledTime;
             var bind = skinBind.ToArray();
             bodyData.Apply(skinBody.sharedMesh, bind);
             if (clothData != null) clothData.Apply(skinCloth.sharedMesh, bind);
@@ -35,8 +40,10 @@ public partial class Dummy
     void Dent(MeshData d, Vector3 at, Vector3 n, float r, float depth, Color tint, float tintAmount, bool cloth)
     {
         float r2 = r * 1.4f; r2 *= r2;
-        for (int i = 0; i < d.Count; i++)
+        d.Query(at, r * 1.4f, nearBuf);
+        for (int q = 0; q < nearBuf.Count; q++)
         {
+            int i = nearBuf[q];
             var off = d.v[i] - at;
             float dd2 = off.sqrMagnitude;
             if (dd2 > r2) continue;
@@ -92,7 +99,7 @@ public partial class Dummy
         {
             var opt = new CutOptions { capDepth = Mathf.Min(0.03f, craterR * 1.1f), irregular = 1f };
             MeshCut.Crater(bodyData, at, n, craterR, opt, true);
-            if (clothData != null) MeshCut.Crater(clothData, at, n, craterR * 1.15f, new CutOptions(), false);
+            if (clothData != null) MeshCut.Crater(clothData, at, n, craterR * 1.45f, new CutOptions(), false);
             meshTopoDirty = true;
         }
     }

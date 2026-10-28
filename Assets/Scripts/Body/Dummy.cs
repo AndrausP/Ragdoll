@@ -323,7 +323,7 @@ public partial class Dummy : MonoBehaviour
     {
         UpdateSkin();
         flowTimer += Time.deltaTime;
-        if (flowTimer > 0.3f) { FlowStep(flowTimer); flowTimer = 0f; }
+        if (flowTimer > 0.5f) { FlowStep(flowTimer); flowTimer = 0f; }
         FlushMesh();
     }
 

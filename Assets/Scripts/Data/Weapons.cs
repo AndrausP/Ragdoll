@@ -21,6 +21,8 @@ public class WeaponDef
     public int slot;              // tecla (1..9, 0 = 10); repetir a tecla alterna as armas da mesma categoria
     public float pitch = 1f;      // tom do som do tiro
     public int burst;             // > 0: cada clique dispara uma rajada desse tamanho
+    public string proj;           // projétil de verdade (modelo em weapons.bytes) em vez de tiro instantâneo: virote, arpão
+    public float projSpeed;       // m/s
 }
 
 /// Golpe de arma branca: perfil, energia, alcance, recarga e tipo de animação (slash, stab, chop, thrust, smash).
@@ -43,6 +45,8 @@ public static partial class Weapons
     public static readonly Prof P_CLAYMORE = new Prof { name = "Montante", kind = "machado", radius = 0.03f, depth = 0.17f, flesh = 420f, bone = 2.4f, organ = 1.2f, bleed = 2.4f, vessel = 1.3f, @struct = 58f, structMult = 0.25f, impulse = 17f, pain = 0.55f, boneCost = 8f, exitWound = false };
     public static readonly Prof P_SCYTHE = new Prof { name = "Foice", kind = "corte", radius = 0.025f, depth = 0.13f, flesh = 470f, bone = 1.6f, organ = 1.1f, bleed = 2.7f, vessel = 1.4f, @struct = 42f, structMult = 0.25f, impulse = 9f, pain = 0.5f, boneCost = 12f, exitWound = false };
     public static readonly Prof P_THROW_KNIFE = new Prof { name = "Faca de arremesso", kind = "perfuração", radius = 0.008f, depth = 0.13f, flesh = 290f, bone = 0.5f, organ = 1.5f, bleed = 1.4f, @struct = 7f, structMult = 0.3f, impulse = 4f, pain = 0.35f, boneCost = 50f, exitWound = false, plug = true };
+    public static readonly Prof P_BOLT = new Prof { name = "Virote de besta", kind = "perfuração", radius = 0.011f, depth = 0.5f, flesh = 210f, bone = 1.1f, organ = 1.7f, bleed = 1.8f, vessel = 1.3f, @struct = 20f, structMult = 0.5f, impulse = 16f, pain = 0.42f, boneCost = 30f, exitWound = false, plug = true };
+    public static readonly Prof P_HARPOON = new Prof { name = "Arpão", kind = "perfuração", radius = 0.017f, depth = 0.7f, flesh = 150f, bone = 1.9f, organ = 2.0f, bleed = 2.4f, vessel = 1.6f, @struct = 52f, structMult = 0.5f, impulse = 34f, pain = 0.55f, boneCost = 16f, exitWound = false, plug = true };
     public static readonly Prof P_HAMMER = new Prof { name = "Marreta", kind = "contusão", radius = 0.035f, depth = 0.07f, flesh = 160f, bone = 2.8f, organ = 0.6f, bleed = 0.15f, vessel = 0.2f, @struct = 20f, structMult = 0.18f, impulse = 22f, pain = 0.5f, boneCost = 6f, exitWound = false };
 
     // montado no construtor estático: usa perfis do WeaponData.cs (a ordem de inicialização entre arquivos parciais não é garantida)
@@ -67,7 +71,7 @@ public static partial class Weapons
     {
         { "pistol", 1 }, { "revolver", 1 }, { "smg", 2 }, { "rifle", 2 }, { "shotgun", 3 }, { "sawedoff", 3 }, { "sniper", 4 },
         { "deagle", 1 }, { "m4", 2 }, { "bullpup", 2 }, { "throwknife", 5 }, { "scythe", 6 }, { "claymore", 7 }, { "flamer", 8 },
-        { "bow", 5 }, { "knife", 6 }, { "sword", 6 }, { "spear", 6 }, { "axe", 7 }, { "hammer", 7 }, { "grenade", 8 }, { "c4", 9 }, { "med", 10 },
+        { "bow", 5 }, { "crossbow", 5 }, { "harpoon", 4 }, { "knife", 6 }, { "sword", 6 }, { "spear", 6 }, { "axe", 7 }, { "hammer", 7 }, { "grenade", 8 }, { "c4", 9 }, { "med", 10 },
     };
 
     static Weapons()
@@ -85,6 +89,8 @@ public static partial class Weapons
         LIST.Add(new WeaponDef { id = "claymore", name = "Montante", type = "melee" });
         LIST.Add(new WeaponDef { id = "scythe", name = "Foice", type = "melee" });
         LIST.Add(new WeaponDef { id = "throwknife", name = "Facas de arremesso", type = "throwknife", mag = 8, reload = 1.6f });
+        LIST.Add(new WeaponDef { id = "crossbow", name = "Besta", type = "gun", rpm = 45f, energy = 300f, pellets = 1, spread = 0.003f, sound = "bow", pitch = 0.8f, recoil = 0.05f, prof = P_BOLT, mag = 1, reload = 2.2f, proj = "bolt", projSpeed = 78f });
+        LIST.Add(new WeaponDef { id = "harpoon", name = "Arpão", type = "gun", rpm = 30f, energy = 520f, pellets = 1, spread = 0.004f, sound = "shotgun", pitch = 0.6f, recoil = 0.14f, prof = P_HARPOON, mag = 1, reload = 3.2f, proj = "harpoon_bolt", projSpeed = 64f });
         LIST.Add(new WeaponDef { id = "flamer", name = "Lança-chamas", type = "flame", mag = 100, reload = 3.2f });
         foreach (var w in LIST) w.slot = SLOT.TryGetValue(w.id, out var s) ? s : 10;
         // ordem estável por categoria (a barra e a rodinha seguem essa ordem)
@@ -105,6 +111,8 @@ public static partial class Weapons
         HINTS["claymore"] = "Clique: golpe de cima (parte ao meio)  |  Direito: varredura (pega vários)";
         HINTS["scythe"] = "Clique: ceifada em arco (corta tudo à frente)";
         HINTS["throwknife"] = "Clique: arremessar faca (crava)  |  Direito: leque de 3  |  Q: recolher";
+        HINTS["crossbow"] = "Clique: virote (crava fundo)  |  Direito: mirar  |  Q: recarregar";
+        HINTS["harpoon"] = "Clique: arpão (atravessa e prende)  |  Segure o direito: puxar o corpo  |  Q: recarregar / soltar corda";
         HINTS["flamer"] = "Segure: jato de fogo (queima, carboniza, incendeia)  |  Q: recarregar";
         foreach (var id in new[] { "pistol", "rifle", "shotgun" })
             if (HINTS.TryGetValue(id, out var h) && !h.Contains("Direito")) HINTS[id] = h.Replace("  |  Q:", "  |  Direito: mirar  |  Q:");

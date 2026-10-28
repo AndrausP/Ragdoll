@@ -7,7 +7,7 @@ using UnityEngine.InputSystem;
 /// Usa o Input System novo quando ativo e o Input Manager antigo caso contrário.
 public static class InputX
 {
-    public enum A { Forward, Back, Left, Right, Jump, Sprint, Crouch, Grab, Spawn, Reset, Clean, Panel, XRay, Slowmo, Help, Escape, Reload, Options, Trap }
+    public enum A { Forward, Back, Left, Right, Jump, Sprint, Crouch, Grab, Spawn, Reset, Clean, Panel, XRay, Slowmo, Help, Escape, Reload, Options, Trap, Inventory }
 
 #if ENABLE_INPUT_SYSTEM
     static Key[][] keys =
@@ -15,7 +15,7 @@ public static class InputX
         new[] { Key.W, Key.UpArrow }, new[] { Key.S, Key.DownArrow }, new[] { Key.A, Key.LeftArrow }, new[] { Key.D, Key.RightArrow },
         new[] { Key.Space }, new[] { Key.LeftShift, Key.RightShift }, new[] { Key.LeftCtrl, Key.C }, new[] { Key.E },
         new[] { Key.F }, new[] { Key.R }, new[] { Key.K }, new[] { Key.Tab }, new[] { Key.X }, new[] { Key.T }, new[] { Key.H },
-        new[] { Key.Escape }, new[] { Key.Q }, new[] { Key.O }, new[] { Key.G },
+        new[] { Key.Escape }, new[] { Key.Q }, new[] { Key.O }, new[] { Key.G }, new[] { Key.I },
     };
     public static bool Held(A a)
     {
@@ -58,7 +58,7 @@ public static class InputX
         new[] { KeyCode.W, KeyCode.UpArrow }, new[] { KeyCode.S, KeyCode.DownArrow }, new[] { KeyCode.A, KeyCode.LeftArrow }, new[] { KeyCode.D, KeyCode.RightArrow },
         new[] { KeyCode.Space }, new[] { KeyCode.LeftShift, KeyCode.RightShift }, new[] { KeyCode.LeftControl, KeyCode.C }, new[] { KeyCode.E },
         new[] { KeyCode.F }, new[] { KeyCode.R }, new[] { KeyCode.K }, new[] { KeyCode.Tab }, new[] { KeyCode.X }, new[] { KeyCode.T }, new[] { KeyCode.H },
-        new[] { KeyCode.Escape }, new[] { KeyCode.Q }, new[] { KeyCode.O }, new[] { KeyCode.G },
+        new[] { KeyCode.Escape }, new[] { KeyCode.Q }, new[] { KeyCode.O }, new[] { KeyCode.G }, new[] { KeyCode.I },
     };
     public static bool Held(A a) { foreach (var k in keys[(int)a]) if (Input.GetKey(k)) return true; return false; }
     public static bool Down(A a) { foreach (var k in keys[(int)a]) if (Input.GetKeyDown(k)) return true; return false; }

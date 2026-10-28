@@ -23,7 +23,9 @@ Unity -batchmode -quit -projectPath . -executeMethod BuildTools.BuildWindows
 | `BonecoGore.exe -autotest` | Cenário fixo de tiros, golpes e explosões + relatório no log |
 | `BonecoGore.exe --phystest` | Estabilidade do ragdoll (queda, 40 tiros, arremesso, levantar) |
 | `BonecoGore.exe --stress` | 10 bonecos + explosão, mede FPS |
-| `BonecoGore.exe --shots=<pasta>` | Capturas de tela (bonecos, feridas, fogo, levantar, viewmodel de cada arma) |
+| `BonecoGore.exe --shots=<pasta>` | Capturas de tela (bonecos, feridas, fogo, levantar, viewmodel de cada arma, inventário e HUD) |
+| `BonecoGore.exe --cuttest --shots-cut=<pasta>` | Amputação em qualquer ponto do membro + comportamento de uma perna perdida (ver `docs/corpo-procedural.md`) |
+| `BonecoGore.exe --woundtest --shots-wound=<pasta>` | Tiros, buracos, sangue escorrendo, foice/machado/marreta, besta e arpão |
 
 O log fica em `%USERPROFILE%\AppData\LocalLow\Andraus\Boneco Gore Sandbox\Player.log`.
 
@@ -45,6 +47,7 @@ O log fica em `%USERPROFILE%\AppData\LocalLow\Andraus\Boneco Gore Sandbox\Player
 | T | Câmera lenta |
 | Tab | Painel médico |
 | **O** | **Configurar mira** (estilo, cor, tamanho, espessura, abertura, contorno, opacidade, mira dinâmica, sensibilidade, FOV) |
+| I | **Inventário** de armas (clique para pegar; I ou Esc fecha) |
 | H / Esc | Esconder ajuda / soltar o mouse |
 
 ### Armas
@@ -53,8 +56,8 @@ O log fica em `%USERPROFILE%\AppData\LocalLow\Andraus\Boneco Gore Sandbox\Player
 | 1 | Pistola 9mm · Revólver .357 · Pistola .50 |
 | 2 | SMG · Fuzil · Carabina M4 · Bullpup (rajada de 3) |
 | 3 | Escopeta · Cano serrado |
-| 4 | Sniper .50 (direito = luneta) |
-| 5 | Arco (segure para puxar) · Facas de arremesso (direito = leque de 3) |
+| 4 | Sniper .50 (direito = luneta) · **Arpão** (atravessa e prende; segure o direito para puxar o corpo, Q solta a corda) |
+| 5 | Arco (segure para puxar) · Facas de arremesso (direito = leque de 3) · **Besta** (virote, recarrega com Q) |
 | 6 | Faca (corte / facada) · Espada · Lança · Foice (ceifada em arco) |
 | 7 | Machado · Marreta (contusão) · Montante (direito = varredura) |
 | 8 | Granada · **Lança-chamas** |

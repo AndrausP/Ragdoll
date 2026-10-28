@@ -85,6 +85,7 @@ public class Player : MonoBehaviour
     void Start() { SelectWeapon(0); }
 
     public WeaponDef Weapon() => Weapons.LIST[weaponI];
+    public int AmmoOf(string id) => ammo.TryGetValue(id, out var a) ? a : 0;
 
     // ------------------------------------------------------------------ viewmodels
 
@@ -262,6 +263,8 @@ public class Player : MonoBehaviour
         { "deagle", new[] { 0.25f, -0.58f, 0.2f, -0.12f, 0.2f } },
         { "m4", new[] { 0.72f, -0.98f, 0.2f, -0.13f, 0.3f } },
         { "bullpup", new[] { 0.62f, -0.95f, 0.2f, -0.13f, 0.3f } },
+        { "crossbow", new[] { 0.62f, -0.95f, 0.2f, -0.10f, 0.3f } },
+        { "harpoon", new[] { 1.05f, -1.25f, 0.2f, -0.12f, 0.3f } },
     };
 
     /// Onde as mãos pegam: cabo (fração do cano até a coronha, fração do topo até a base), inclinação do cabo (graus)
@@ -280,6 +283,8 @@ public class Player : MonoBehaviour
         { "deagle", new[] { 0.5f, 1f, 0.45f, 16f, -1f } },
         { "m4", new[] { 0.56f, 0.72f, 0.5f, 12f, 0.3f } },
         { "bullpup", new[] { 0.36f, 0.52f, 0.5f, 12f, 0.13f } },
+        { "crossbow", new[] { 0.55f, 0.85f, 0.4f, 8f, 0.3f } },
+        { "harpoon", new[] { 0.62f, 0.92f, 0.35f, 16f, 0.28f } },
     };
 
     /// Centro dos vértices do modelo (no espaço de root) numa fatia: z0..z1 do cano à coronha, y abaixo de yMin (do topo).
@@ -309,7 +314,7 @@ public class Player : MonoBehaviour
         { "sword", new[] { 0.9f, 0.1f, 0.22f, -0.27f, -0.42f, 0.55f } },
         { "hammer", new[] { 0.5f, 0.22f, 0.22f, -0.21f, -0.42f, 0.45f } },
         { "claymore", new[] { 1.05f, 0.08f, 0.22f, -0.28f, -0.44f, 0.5f } },
-        { "scythe", new[] { 1.2f, 0.3f, 0.24f, -0.3f, -0.5f, 0.35f } },
+        { "scythe", new[] { 1.2f, 0.3f, 0.20f, -0.30f, -0.45f, 0.9f, 1.5708f } },
         { "throwknife", new[] { 0.28f, 0.18f, 0.2f, -0.22f, -0.4f, 0.9f } },
     };
 
@@ -353,7 +358,8 @@ public class Player : MonoBehaviour
             var b = new GameObject("blade").transform;
             b.SetParent(root, false);
             b.localPosition = new Vector3(mv[2], mv[3], mv[4]);
-            b.localRotation = U.Axis(Vector3.right, -mv[5]);            // ponta inclinada para a frente
+            // ponta inclinada para a frente; mv[6] (opcional) gira a arma em torno do próprio cabo (foice: lâmina para a frente)
+            b.localRotation = U.Axis(Vector3.right, -mv[5]) * U.Axis(Vector3.up, mv.Length > 6 ? mv[6] : 0f);
             bowParts["blade_" + id] = b;
             var m = Game.Model(mid, Quaternion.identity, mv[0], out var sz, false);
             m.transform.SetParent(b, false);
@@ -376,6 +382,13 @@ public class Player : MonoBehaviour
             }
             Arm(b, "r", Vector3.zero, Vector3.up, Quaternion.Inverse(b.localRotation) * new Vector3(0.25f, -0.3f, 1f),
                 Quaternion.Inverse(b.localRotation) * new Vector3(0.1f, -0.3f, 0.42f));
+            if (id == "scythe")
+            {
+                // foice é de duas mãos: a esquerda segura o cabo mais acima
+                var inv2 = Quaternion.Inverse(b.localRotation);
+                var up2 = new Vector3(0, 0.38f, 0);
+                Arm(b, "l", up2, Vector3.up, inv2 * new Vector3(-1f, -0.3f, 0.25f), up2 + inv2 * new Vector3(-0.22f, -0.3f, 0.36f));
+            }
             return true;
         }
         switch (id)
@@ -483,7 +496,7 @@ public class Player : MonoBehaviour
         }
         for (int k = 0; k < 10; k++)
             if (InputX.SlotDown(k)) SelectSlot(k == 0 ? 10 : k);
-        if (InputX.AnyMouseDown && !InputX.Captured && !Crosshair.menuOpen && !Game.autotest && Game.shotsDir == "") InputX.Capture(true);
+        if (InputX.AnyMouseDown && !InputX.Captured && !Crosshair.menuOpen && !Hud.inventoryOpen && !Game.autotest && Game.shotsDir == "") InputX.Capture(true);
         if (InputX.Down(InputX.A.Escape)) { InputX.Capture(false); Crosshair.menuOpen = false; }
         HandleWeapon(Time.deltaTime);
         HandleGrabInput();
@@ -696,11 +709,15 @@ public class Player : MonoBehaviour
         if (reloadT >= 1f) { reloadT = -1f; ammo[w.id] = w.mag; cooldown = 0.1f; }
     }
 
+    /// Origem da corda do arpão (boca do cano)
+    public Vector3 RopeOrigin => muzzles.TryGetValue("harpoon", out var m) && m ? m.position : camNode.position;
+
     public void FireGun(WeaponDef w, Vector3 from, Vector3 fwd)
     {
         cooldown = 60f / w.rpm;
         if (w.mag > 0) ammo[w.id] = Mathf.Max(0, ammo[w.id] - 1);
         var mz = muzzles[w.id].position;
+        if (w.proj != null) { FireProjectile(w, from, fwd, mz); return; }
         for (int i = 0; i < w.pellets; i++)
         {
             float spread = w.spread * (zoom ? 0.15f : 1f) * (1f - ads * 0.55f) * (1f + spreadNow * 1.5f);
@@ -718,6 +735,21 @@ public class Player : MonoBehaviour
         vmKick = 1f;
         flashT = 0.05f;
         AddShake(w.recoil * 1.5f);
+    }
+
+    /// Virote / arpão: projétil que voa em arco e crava (ver Arrow)
+    void FireProjectile(WeaponDef w, Vector3 from, Vector3 fwd, Vector3 mz)
+    {
+        float spread = w.spread * (1f - ads * 0.55f);
+        var d = (fwd + new Vector3(U.Randfn(0, spread), U.Randfn(0, spread), U.Randfn(0, spread))).normalized;
+        var a = new GameObject(w.proj).AddComponent<Arrow>();
+        a.tether = w.id == "harpoon";
+        a.Launch(from + fwd * 0.4f, d * w.projSpeed, w.energy, selfEx, w.prof, w.proj);
+        Game.sfx.PlayUI(w.sound, -3f, w.pitch * U.RandRange(0.95f, 1.05f));
+        var feel = WeaponFeels.Of(w.id);
+        recoil += w.recoil * feel.recoilPitch * (1f - ads * 0.35f);
+        vmKick = 1f;
+        AddShake(w.recoil * 1.2f);
     }
 
     void Melee(Prof prof, float energy, float reach, string kind, bool sweep = false)

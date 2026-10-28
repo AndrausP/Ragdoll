@@ -414,6 +414,17 @@ public class Shots : MonoBehaviour
         yield return new WaitForEndOfFrame();
         ScreenCapture.CaptureScreenshot(Path.Combine(Game.shotsDir, "menu_mira.png"));
         yield return null;
+        Crosshair.menuOpen = false;
+        Game.hud.ShowInventory(true);
+        yield return new WaitForSeconds(0.4f);
+        yield return new WaitForEndOfFrame();
+        ScreenCapture.CaptureScreenshot(Path.Combine(Game.shotsDir, "inventario.png"));
+        yield return null;
+        Game.hud.ShowInventory(false);
+        yield return new WaitForSeconds(0.3f);
+        yield return new WaitForEndOfFrame();
+        ScreenCapture.CaptureScreenshot(Path.Combine(Game.shotsDir, "hud_normal.png"));
+        yield return null;
         Application.Quit();
     }
 }
@@ -719,6 +730,45 @@ public class CutTest : MonoBehaviour
             foreach (var q in d.ValidParts()) { vmax = Mathf.Max(vmax, q.rb.linearVelocity.magnitude); if (q.fragment) frags++; }
             Debug.Log($"[corte] {cs.name}: fragmentos={frags} vmax={vmax:F2} sangue={(int)d.blood} estado={d.StatusText()}");
         }
+        // ---- comportamento depois de perder uma perna: tenta levantar, cai, estanca o sangue / rasteja
+        {
+            var d = Game.main.SpawnDummy(new Vector3(0f, 0.005f, -2.5f), Quaternion.identity);
+            d.holdStill = true;
+            yield return new WaitForSeconds(0.6f);
+            d.holdStill = false;
+            var th = d.parts["thigh_l"];
+            d.ApplyPenetration(th, th.Xform.Apply(new Vector3(0f, 0.02f, 0.05f)), new Vector3(-1f, 0f, 0f), 380f, Weapons.P_SCYTHE, Vector3.forward);
+            for (int k = 0; k < 6 && !d.parts.ContainsKey("thigh_l#" + 1); k++)
+            {
+                d.ApplyPenetration(th, th.Xform.Apply(new Vector3(0f, 0.02f, 0.05f)), new Vector3(-1f, 0f, 0f), 380f, Weapons.P_SCYTHE, Vector3.forward);
+                yield return null;
+            }
+            float t = 0f; int shot = 0; float next = 0f;
+            float vmaxAll = 0f, gapAll = 0f;
+            while (t < 36f && !d.dead)
+            {
+                yield return new WaitForSeconds(0.25f); t += 0.25f;
+                float vmax = 0f;
+                foreach (var q in d.ValidParts())
+                {
+                    vmax = Mathf.Max(vmax, q.rb.linearVelocity.magnitude);
+                    if (q.parentPart && !q.severed && q.def.joint != null)
+                    {
+                        var anc = q.def.joint.anchor;
+                        gapAll = Mathf.Max(gapAll, Vector3.Distance(q.parentPart.Xform.Apply(anc - q.parentPart.def.pos), q.Xform.Apply(anc - q.def.pos)));
+                    }
+                }
+                vmaxAll = Mathf.Max(vmaxAll, vmax);
+                if (t >= next) { next += 3f; Debug.Log($"[comportamento] t={t:F0}s {d.StatusText()} acao={d.action} pose={d.curPose} mente={d.mind} gettingUp={d.gettingUp} sangue={(int)d.blood} vmax={vmax:F1}"); }
+                if (cam != null && t >= 2f + shot * 4f && shot < 9)
+                {
+                    var pc = d.parts["pelvis"].transform.position;
+                    yield return Snap(cam, pc, new Vector3(1.8f, 0.9f, 1.6f), dir, $"perna_perdida_{shot}");
+                    shot++;
+                }
+            }
+            Debug.Log($"[comportamento] fim: vmax={vmaxAll:F1} junta aberta max={gapAll:F3} m morto={d.dead}");
+        }
         Debug.Log("== CORTE fim");
         Application.Quit();
     }
@@ -820,6 +870,20 @@ public class WoundTest : MonoBehaviour
         d2.ApplyPenetration(th, th.Xform.Apply(new Vector3(0f, 0.05f, 0.07f)), new Vector3(0f, 0f, -1f), 360f, Weapons.P_HAMMER, Vector3.forward);
         yield return new WaitForSeconds(1.6f);
         if (cam != null) yield return Snap(cam, d2.parts["pelvis"].transform.position, new Vector3(1.5f, 0.9f, 1.8f), dir, "machado_antebraco", 45f);
+        // ---- armas novas: besta e arpão contra um boneco parado
+        var d3 = Game.main.SpawnDummy(new Vector3(0f, 0.005f, -2.5f), Quaternion.identity);
+        d3.holdStill = true;
+        yield return new WaitForSeconds(0.6f);
+        var pl = Game.player;
+        foreach (var wid in new[] { "crossbow", "harpoon" })
+        {
+            var w = Weapons.ById(wid);
+            var tgt = d3.parts["chest"].transform.position + new Vector3(wid == "crossbow" ? -0.05f : 0.06f, 0.02f, 0f);
+            var from = new Vector3(0f, 1.6f, 4f);
+            pl.FireGun(w, from, (tgt - from).normalized);
+            yield return new WaitForSeconds(0.5f);
+            if (cam != null) yield return Snap(cam, d3.parts["chest"].transform.position, new Vector3(0.9f, 0.2f, 1.4f), dir, "arma_" + wid, 40f);
+        }
         Debug.Log("== FERIDAS fim");
         Application.Quit();
     }

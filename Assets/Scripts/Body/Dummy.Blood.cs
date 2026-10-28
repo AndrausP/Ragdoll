@@ -8,6 +8,7 @@ public partial class Dummy
 {
     Mesh bakeBody, bakeCloth;
     readonly List<Vector3> bakeV = new List<Vector3>(), bakeC = new List<Vector3>();
+    static readonly List<int> stainBuf = new List<int>(4096);
     static readonly Color FRESH = new Color(0.52f, 0.02f, 0.03f), OLD = new Color(0.27f, 0.012f, 0.02f), SOAK = new Color(0.22f, 0.035f, 0.065f);
 
     void FlowStep(float dt)
@@ -61,8 +62,10 @@ public partial class Dummy
     {
         if (!d.hasColors) return;
         float reach2 = reach * reach;
-        for (int i = 0; i < d.Count; i++)
+        d.Query(wr, reach, stainBuf);
+        for (int q = 0; q < stainBuf.Count; q++)
         {
+            int i = stainBuf[q];
             if ((d.v[i] - wr).sqrMagnitude > reach2) continue;
             if (Vector3.Dot(d.n[i], w.localNormal) < -0.15f) continue;                // outro lado do membro
             var dl = tf.TransformPoint(baked[i]) - wp;

@@ -77,6 +77,21 @@ public static class VmArms
                 cols[i] = Color.Lerp(c0, sleeve * (0.9f + 0.2f * Mathf.PerlinNoise(verts[i].x * 90f, verts[i].y * 90f)), cuff);
             }
         }
+        // luva tática sem dedos (como nos FPS clássicos): cobre palma e dorso até um pouco além dos nós, deixa as pontas e o polegar de fora
+        {
+            var hp0 = defs[parts[2]].pos; float sg = side == "l" ? 1f : -1f;
+            var glove = new Color(0.05f, 0.05f, 0.056f, 1f);
+            for (int i = 0; i < verts.Count; i++)
+            {
+                float hw = bws[i].boneIndex0 == 2 ? bws[i].weight0 : 0f;
+                if (hw < 0.5f) continue;
+                var p = verts[i] - hp0;
+                float cover = Mathf.Clamp01((p.y + 0.050f) / 0.010f);
+                float thumbBare = Mathf.Clamp01((p.x * sg - 0.008f) / 0.010f) * Mathf.Clamp01((-p.y - 0.01f) / 0.02f);
+                cover *= 1f - thumbBare;
+                cols[i] = Color.Lerp(cols[i], glove * (0.85f + 0.5f * Mathf.PerlinNoise(p.x * 300f, p.y * 300f)), cover);
+            }
+        }
         // blend shape "punho" no espaço local da mão (Godot: y para cima, palma em +z)
         var hPos = defs[parts[2]].pos;
         float sgn = side == "l" ? 1f : -1f;

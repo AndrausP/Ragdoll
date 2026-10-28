@@ -19,9 +19,21 @@ public static class MeshStore
 {
     static Dictionary<string, StoredMesh> human, weapons;
 
+    /// Corpo: "human" (original) ou "human_v2" (male base mesh CC0 retargetado; ver tools/build_human_v2.py).
+    /// Escolha: argumento --body=v2 ou PlayerPrefs "corpo_v2" (menu O); o original continua intacto.
+    public static bool UseV2 { get; private set; }
+    static string HumanResource => UseV2 ? "Models/human_v2" : "Models/human";
+
+    public static void SelectBody(bool v2)
+    {
+        if (v2 == UseV2 && human != null) return;
+        UseV2 = v2;
+        human = null;
+    }
+
     public static StoredMesh Human(string name)
     {
-        if (human == null) human = Load("Models/human");
+        if (human == null) human = Load(HumanResource);
         return human.TryGetValue(name, out var m) ? m : null;
     }
 
@@ -33,7 +45,7 @@ public static class MeshStore
 
     public static bool HumanAvailable
     {
-        get { if (human == null) human = Load("Models/human"); return human.Count > 0; }
+        get { if (human == null) human = Load(HumanResource); return human.Count > 0; }
     }
 
     static string ReadStr(BinaryReader r) => Encoding.UTF8.GetString(r.ReadBytes(r.ReadInt32()));

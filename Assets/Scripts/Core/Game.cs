@@ -24,6 +24,7 @@ public static class Game
     public static bool autotest;
     public static string shotsDir = "";
     public static bool physTest, stressTest;
+    static bool? bodyV2;      // argumento de linha de comando; sem ele vale a preferência salva
 
     public static event Action<string, Color> EventLogged;
 
@@ -36,7 +37,10 @@ public static class Game
             else if (a.StartsWith("--shots=")) shotsDir = a.Substring(8);
             else if (a == "--phystest") physTest = true;
             else if (a == "--stress") stressTest = true;
+            else if (a == "--body=v2") bodyV2 = true;
+            else if (a == "--body=v1") bodyV2 = false;
         }
+        MeshStore.SelectBody(bodyV2 ?? PlayerPrefs.GetInt("corpo_v2", 0) == 1);
         // testes automáticos e capturas rodam sem som
         AudioListener.volume = autotest || physTest || stressTest || shotsDir != "" ? 0f : 1f;
         // matriz de colisão = máscaras do Godot

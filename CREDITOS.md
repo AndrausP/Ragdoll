@@ -6,6 +6,8 @@ Todos os recursos abaixo são **CC0 (domínio público)**: uso livre, inclusive 
 - Armas de fogo: **Ultimate Gun Pack** — Quaternius — https://opengameart.org/content/low-poly-guns-pack
 - Armas brancas e arco: **LowPoly Medieval Weapons** — Quaternius — https://opengameart.org/node/88080
 - Corpo humano, ossos e órgãos: `Male human with separated anatomical systems.blend` (fornecido pelo autor do projeto; confirmar a licença antes de distribuir).
+- Corpo v2 (`human_v2.bytes`, `tools/fontes/male-base-mesh-base_male.glb`): **male base mesh** (Innerscene) — CC0 segundo o autor do projeto; o arquivo não traz metadado de licença, confirmar na página de origem.
+- Avaliados e **não usados**: `torso-with-removable-organs.glb` (CC0 segundo o autor do projeto; contém uma casca de torso MakeHuman CC0) e **Universal Animation Library [Standard]** — Quaternius — CC0 (`License.txt` do pacote).
 
 ## Sons (`Assets/Resources/Sounds`, gerados por `make_sounds.py`)
 - Tiros: **The Free Firearm Sound Library** — Ben Jaszczak, Brian Nelson, Kevin Heras, Matthew Nanney — https://opengameart.org/content/the-free-firearm-sound-library

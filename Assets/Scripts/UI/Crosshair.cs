@@ -16,6 +16,7 @@ public static class Crosshair
     public static float length = 9f, thickness = 1.5f, gap = 5f, opacity = 0.9f, dot = 2.5f;
     public static bool outline = true, dynamic = true, hitmarker = true;
     public static float sensitivity = 1f, fov = 78f, volume = 1f;
+    public static bool bodyV2;     // corpo novo (male base mesh); vale ao reiniciar o jogo
     public static bool menuOpen;
 
     static bool loaded;
@@ -37,6 +38,7 @@ public static class Crosshair
         sensitivity = PlayerPrefs.GetFloat("sensibilidade", sensitivity);
         fov = PlayerPrefs.GetFloat("fov", fov);
         volume = Mathf.Clamp01(PlayerPrefs.GetFloat("volume", volume));
+        bodyV2 = PlayerPrefs.GetInt("corpo_v2", 0) == 1;
         ApplyVolume();
         style = Mathf.Clamp(style, 0, STYLES.Length - 1);
         color = Mathf.Clamp(color, 0, COLORS.Length - 1);
@@ -63,6 +65,7 @@ public static class Crosshair
         PlayerPrefs.SetFloat("sensibilidade", sensitivity);
         PlayerPrefs.SetFloat("fov", fov);
         PlayerPrefs.SetFloat("volume", volume);
+        PlayerPrefs.SetInt("corpo_v2", bodyV2 ? 1 : 0);
         PlayerPrefs.Save();
     }
 
@@ -147,7 +150,7 @@ public static class Crosshair
             sTitle = new GUIStyle(GUI.skin.label) { fontSize = 20, fontStyle = FontStyle.Bold };
             sLabel = new GUIStyle(GUI.skin.label) { fontSize = 14 };
         }
-        var r = new Rect(vw * 0.5f - 300, H * 0.5f - 330, 600, 660);
+        var r = new Rect(vw * 0.5f - 300, H * 0.5f - 350, 600, 700);
         fill(r, new Color(0.04f, 0.04f, 0.06f, 0.93f));
         GUILayout.BeginArea(new Rect(r.x + 20, r.y + 14, r.width - 40, r.height - 28));
         GUILayout.Label("CONFIGURAÇÕES DE MIRA", sTitle);
@@ -166,6 +169,9 @@ public static class Crosshair
         GUILayout.Label("CÂMERA", sTitle);
         sensitivity = Slider("Sensibilidade", sensitivity, 0.2f, 3f, "F2");
         fov = Slider("Campo de visão", fov, 60f, 100f, "F0");
+        GUILayout.Space(10);
+        GUILayout.Label("CORPO", sTitle);
+        bodyV2 = Toggle("Modelo novo (vale ao reiniciar o jogo)", bodyV2);
         GUILayout.Space(10);
         GUILayout.Label("SOM", sTitle);
         volume = Slider("Volume geral", volume, 0f, 1f, "F2");

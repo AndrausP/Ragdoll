@@ -13,6 +13,7 @@ Shader "BG/Skin"
         _FabricScale ("Repetições do tecido por metro", Float) = 9
         _Pores ("Poros (ruído)", 2D) = "gray" {}
         _Detail ("Usa detalhe", Float) = 0
+        _Push ("Empurrar ao longo da normal (m) - camada de roupa", Float) = 0
     }
     SubShader
     {
@@ -22,7 +23,7 @@ Shader "BG/Skin"
         #pragma surface surf Standard fullforwardshadows vertex:vert addshadow
         #pragma target 3.5
         fixed4 _SkinColor, _BloodColor;
-        half _UseVC, _FabricScale, _Detail;
+        half _UseVC, _FabricScale, _Detail, _Push;
         sampler2D _Fabric, _Pores;
         float _Blood[17];
         float _Char[17];
@@ -30,6 +31,8 @@ Shader "BG/Skin"
         void vert(inout appdata_full v, out Input o)
         {
             UNITY_INITIALIZE_OUTPUT(Input, o);
+            // roupa: afasta da pele pela normal JÁ deformada (o deslocamento em repouso encolhia nas articulações)
+            v.vertex.xyz += v.normal * _Push;
             int part = clamp((int)(v.texcoord1.x * 32.0), 0, 16);
             o.blood = _Blood[part];
             o.charred = _Char[part];

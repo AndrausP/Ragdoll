@@ -122,7 +122,7 @@ public partial class Dummy : MonoBehaviour
         mesh.SetUVs(3, new List<Vector3>(sm.mesh.normals));
         mesh.bindposes = allBind.ToArray();
         // roupa como casca separada: precisa das cores originais, então sai antes de a pele ser repintada
-        var clothMesh = sm.hasColors ? ClothLayer.Extract(mesh, DummyPart.SKIN) : null;
+        var clothMesh = sm.hasColors ? ClothLayer.Extract(mesh) : null;
         skinBody = go.AddComponent<SkinnedMeshRenderer>();
         skinBody.sharedMesh = mesh;
         skinBody.bones = allBones.ToArray();
@@ -139,6 +139,9 @@ public partial class Dummy : MonoBehaviour
             skinCloth.rootBone = transform;
             skinCloth.updateWhenOffscreen = true;
             skinCloth.quality = SkinQuality.Bone4;
+            var mpb = new MaterialPropertyBlock();
+            mpb.SetFloat("_Push", ClothLayer.THICK);
+            skinCloth.SetPropertyBlock(mpb);
         }
         skinShader = new Material(Mats.Skin);
         skinShader.SetColor("_SkinColor", DummyPart.SKIN);

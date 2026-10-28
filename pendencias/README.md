@@ -10,6 +10,7 @@ O que ainda falta no projeto (branch `corpo-procedural`). Cada arquivo tem um te
 | [04-corpo-e-feridas.md](04-corpo-e-feridas.md) | Tampa do corte, buracos na roupa, cortes no tronco | Média |
 | [05-desempenho-e-projeto.md](05-desempenho-e-projeto.md) | Quadros lentos, arquivos do Unity, testes | Média |
 | [06-modelos-e-assets.md](06-modelos-e-assets.md) | Modelo do Drake e outros assets | Baixa |
+| [07-bugs-reportados-no-teste.md](07-bugs-reportados-no-teste.md) | Membros viram fitas na explosão; tórax não dissolve nem é cortado | **Alta** |
 
 ## Como me passar o feedback com precisão
 - Print com o painel médico visível (Tab), a arma na mão e a parte atingida.

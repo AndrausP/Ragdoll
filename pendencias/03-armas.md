@@ -1,12 +1,11 @@
 # 03 — Armas
 
-Entraram: Besta (`crossbow`, modelo CC0) e Arpão (`harpoon`, feito por código em `tools/add_weapons.py`).
+Teste: `BonecoGore.exe --weapontest` — 0 falhas.
 
-- [ ] Arpão: testar ao vivo o puxão com o botão direito (`HarpoonRope` em `Weapons/Projectiles.cs`); o disparo, o crave e a
-      corda foram testados, o puxão não. Conferir distância mínima, força e soltar com Q.
-- [ ] Arpão preso em parede/objeto (hoje só prende em boneco).
-- [ ] Sons próprios para besta e arpão (hoje reaproveitam "bow" e "shotgun" com tom alterado).
-- [ ] Mais armas pedidas ("arpão etc."): escolher (pistola de pregos, machadinha de arremesso, serra, etc.) e conseguir
-      modelos CC0. Não foi feita nenhuma além de besta e arpão.
-- [ ] Recarga: besta e arpão usam a animação/sons de recarga de arma de fogo.
-- [ ] Munição do inventário para armas sem carregador (arco, facas) mostra só texto.
+- [x] Arpão: puxão testado (boneco de 10,4 m para 2,6 m em 3 s); para perto do jogador; Q ou trocar de arma solta a corda.
+- [x] Arpão preso em parede (puxa o jogador até lá) e em objeto solto (puxa o objeto).
+- [x] Sons próprios (síntese): besta, arpão, pistola de pregos, catraca ao recolher a corda, recargas de manivela/elástico.
+- [x] Armas novas: **pistola de pregos** (tecla 1) e **machadinha de arremesso** (tecla 5), modelos em `tools/add_weapons.py`.
+- [x] Recarga própria da besta (manivela, ponta para baixo) e do arpão (boca para cima, empurra a haste).
+- [ ] Munição do inventário para armas sem carregador (arco) mostra só texto.
+- [ ] Pregos prendendo o membro na parede (o prego crava e fere, mas não "prega").

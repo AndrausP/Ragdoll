@@ -1,34 +1,34 @@
 # 07 — Bugs reportados pelo usuário em teste (explosão com C4 e besta)
 
-Origem: 3 prints do usuário. Ainda **não reproduzidos nem corrigidos**.
+Origem: 3 prints do usuário. **Reproduzidos e corrigidos.** Teste: `BonecoGore.exe --blasttest` (17 casos: C4 no peito,
+coxa, barriga, braço e cabeça, granada nos pés e um controle sem corte) — 0 falhas em duas rodadas seguidas.
 
-## A. Membros viram "fitas" esticadas depois da explosão (prints 1, 2 e 3)
-Depois de C4 / estilhaços, braços e pernas aparecem como tubos compridos e finos, ligados ao corpo, em vez de pedaços
-soltos com tampa. O log mostra "AMPUTAÇÃO: … cortado(a) a 9 cm / 15 cm da articulação" nos quatro membros.
+## A. Membros viram "fitas" esticadas depois da explosão
+Causas encontradas (todas confirmadas medindo o triângulo mais esticado e os ossos dele):
+- [x] Lado proximal do corte ainda pesava nos ossos da cadeia distal → **separação rígida dos pesos** (`proxMap`/`distMap`).
+- [x] Corte num membro já com galho arrancado religava esse galho ao fragmento com junta nova → galho só troca de dono.
+- [x] Mão/pé destruído depois do corte ficava cinemático e preso ao fragmento (segurava o pedaço no ar) → solta a junta;
+      pesos divididos vão inteiros para um lado (`SnapWeightsOff`).
+- [x] Buraco da explosão/tiro no tronco pegava faces do braço/pescoço vizinhos e a tampa ligava os dois → o buraco só fura
+      a pele da própria parte e o funil fica preso ao osso dela.
+- [x] Tampa do corte do tronco copiava os pesos dos ombros (borda nas axilas) → miolo da tampa preso ao osso do pedaço;
+      corte do peito fica abaixo das axilas.
+- [x] Junta religada ao fragmento usava a pose dobrada como zero (limites dobrados) → criada a partir da pose de repouso.
+- [x] Fragmento/toco de 2–4 cm girava solto (inércia mínima) → travado; razão de massa mínima 6:1 entre vizinhos.
+- [x] Auxiliares de ombro/quadril arrastavam a pele do peito com o braço jogado ao extremo → limitados a 60°.
+- [x] Explosão processa das pontas para o tronco e corta perto do ponto da explosão.
+- Observação: parte do que parecia "fita" nos prints eram as **alças de intestino** (cor de pele). Agora são vermelho-escuras e com gomos.
 
-- [ ] Reproduzir: C4 grudada no boneco (`Player.PlaceC4`) + detonar; capturar com `--cuttest`-like (explosão em
-      `Dummy.ApplyBlast`).
-- [ ] Hipótese 1: vários cortes seguidos na mesma explosão (`CutAt` chamado por parte, com `cutHint` do centro da parte e
-      `ragged = 1`) — a região (`CutField`) usa os pesos de osso; depois do primeiro corte os vértices do lado distal passam a
-      pesar no osso novo e o segundo corte, na parte vizinha, pode deixar vértices "no meio" ligados aos dois pedaços.
-- [ ] Hipótese 2: o corte irregular (`ragged`) desloca o plano até 4 cm; triângulos esticados entre vértices dos dois lados
-      não são separados quando a divisão cai fora da região de pesos.
-- [ ] Hipótese 3: o pedaço cortado mantém pesos antigos no osso do pai nos vértices de transição (articulação), então a pele
-      estica até o fragmento. Conferir `CutOptions.proxMap/distMap` e os pesos auxiliares (`aux_*`).
-- [ ] Conferir também `Dummy.UpdateSkin` para fragmentos com `meshDetached` e `severed` simultâneos.
-
-## B. Tórax não "dissolve" e o corpo não é cortado de verdade (prints 2 e 3)
-O tronco (pelve, abdômen, tórax) continua inteiro com todos os órgãos "DESTRUÍDO"; só os membros saem. A explosão de C4 não
-abre o corpo, e não existe corte de tronco (`Cuttable` aceita só membros e pescoço, ver `Dummy.Cut.cs`).
-
-- [ ] Corte do tronco por explosão/lâmina grande: dividir pelve/abdômen/tórax em dois pedaços com tampa e corpo físico próprio
-      (as partes do tronco são caixas, não cápsulas; falta definir o eixo e o plano de corte).
-- [ ] "Dissolver" o tronco na explosão (destruição de partes): hoje `DestroyPart` só vale para folhas (mão, pé, cabeça).
-      Definir gibs/pedaços para tórax e abdômen, com órgãos e sangue saindo.
-- [ ] Órgãos destruídos devem sair do corpo quando o tronco abre (`Fx/Guts.cs` existe para evisceração; ligar ao novo corte).
+## B. Tórax não "dissolve" e o corpo não é cortado de verdade
+- [x] Corte do tronco (cintura = abdômen, peito = tórax) com tampa, dois corpos e órgãos repartidos; morte imediata.
+- [x] Explosão forte no tronco abre a parede (buraco com tampa de carne na pele e na roupa), joga órgãos destruídos e alças
+      para fora; perto o bastante parte o corpo. Limiares em `ImpactConfig` (`TORSO_OPEN_DMG`, `TORSO_SPLIT_*`).
+- [x] Amputação por explosão com limiar configurável (`BLAST_TEAR_FRAC`, `BLAST_TEAR_CHANCE`).
+- [ ] "Dissolver" o tronco em vários pedaços (gibs Voronoi). Hoje: abre e parte em dois, não esfarela.
 
 ## C. Detalhes visíveis nos prints
-- [ ] Print 1: besta/virote e corda do arpão aparecem sobre o corpo morto; a mão e o braço do jogador atravessam o viewmodel
-      de forma estranha (arco/besta de lado). Revisar a pose da besta.
-- [ ] Print 2/3: o tronco fica coberto de manchas e "quadrados" coloridos (decalques de ferida antigos sobre a pele
-      deformada). Revisar `WoundFx` com muitos ferimentos no mesmo ponto.
+- [x] Virote/arpão cravados seguem o pedaço cortado e caem quando a parte é destruída; corda solta ao trocar de arma e faz
+      barriga quando frouxa.
+- [x] Pose da besta: menor, mais à frente e mais baixa, segurada pelas duas mãos (capturas `vm_crossbow.png`).
+- [x] "Quadrados" no tronco: decalques antigos eram cópia rígida da malha original. Agora seguem a pele deformada deste
+      boneco, somem sobre buracos/cortes e não empilham no mesmo ponto.

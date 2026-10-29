@@ -808,7 +808,7 @@ public partial class Dummy
     readonly List<Dictionary<string, Vector3>> gkJ = new List<Dictionary<string, Vector3>>();
     float getUpClock, getUpEnd, getUpSlow = 1f;
     int getUpLungeKey = -1;
-    class GetUpPin { public Vector3 at; public float w; public bool on; }
+    class GetUpPin { public Vector3 at, lastFk; public float w, lift; public bool on, has; }
     readonly Dictionary<string, GetUpPin> getUpPins = new Dictionary<string, GetUpPin>();
     public float GetUpElapsed => getUpClock;      // testes
 
@@ -954,7 +954,7 @@ public partial class Dummy
         foreach (var k in new List<string>(xf.Keys)) xf[k] = xf[k].Translated(new Vector3(0, lift, 0));
         // apoios: mão/pé que chega ao chão fica preso até a curva tirá-lo de lá; nos últimos 0,35 s soltam para a
         // pose em pé (sem pulo na passagem para a animação de andar)
-        float release = Mathf.Clamp01((getUpEnd - getUpClock) / 0.35f);
+        float release = Mathf.Clamp01((getUpEnd - getUpClock) / 0.6f);
         foreach (var (a, b, c) in new[] { ("upper_arm_l", "forearm_l", "hand_l"), ("upper_arm_r", "forearm_r", "hand_r"), ("thigh_l", "shin_l", "foot_l"), ("thigh_r", "shin_r", "foot_r") })
         {
             if (!xf.ContainsKey(c)) continue;
@@ -962,18 +962,35 @@ public partial class Dummy
             var pc = parts[c]; var pb = parts[b];
             float h = xf[c].p.y - pc.PartRadius() * 0.9f - standRoot.p.y;
             var wrist = xf[b].Apply(pc.def.joint.anchor - pb.def.pos);
-            if (!pin.on && h < 0.035f && getUpClock > 0.15f) { pin.on = true; pin.at = wrist; }
-            else if (pin.on && h > 0.07f) pin.on = false;
+            var flat = wrist - pin.lastFk; flat.y = 0f;
+            float fkSpeed = pin.has ? flat.magnitude / dt : 0f;
+            pin.lastFk = wrist; pin.has = true;
+            // apoio que a curva leva para longe (> 18 cm) solta: o membro é reposicionado com um passo, não arrastado
+            if (pin.on && h > 0.08f) pin.on = false;
+            else if (pin.on && Vector3.Distance(new Vector3(pin.at.x, 0, pin.at.z), new Vector3(wrist.x, 0, wrist.z)) > 0.12f)
+            {
+                pin.on = false;
+                pin.lift = Mathf.Max(pin.lift, 0.06f);      // sai do apoio pelo ar
+            }
+            else if (!pin.on && h < 0.05f && fkSpeed < 0.35f && getUpClock > 0.1f) { pin.on = true; pin.at = wrist; }
             pin.w = U.MoveToward(pin.w, pin.on ? 1f : 0f, dt / 0.12f);
-            float w = pin.w * release;
-            if (w > 1e-3f) PinChain(xf, a, b, c, pin.at, w);
+            // passo: rente ao chão e se deslocando, o membro sobe num arco em vez de raspar o piso
+            float wantLift = !pin.on && h < 0.09f && fkSpeed > 0.15f ? Mathf.Clamp(fkSpeed * 0.07f, 0.035f, 0.1f) : 0f;
+            pin.lift = wantLift > pin.lift ? wantLift : U.MoveToward(pin.lift, wantLift, dt * 0.5f);   // sobe já, desce devagar
+            // alvo = do apoio preso até a pose da curva erguida pelo passo
+            var free = wrist + Vector3.up * pin.lift;
+            float w = Mathf.Max(pin.w * release, pin.lift > 1e-3f ? 1f : 0f);
+            if (w > 1e-3f) PinChain(xf, a, b, c, Vector3.Lerp(free, pin.at, pin.w * release), w);
         }
         foreach (var kv in xf)
         {
             var p = parts[kv.Key];
             prevPos[kv.Key] = p.transform.position; prevRot[kv.Key] = p.transform.rotation;
-            p.rb.position = kv.Value.p; p.rb.rotation = kv.Value.q;
-            p.transform.SetPositionAndRotation(kv.Value.p, kv.Value.q);
+            // limite de giro por quadro nos membros: a IK pode trocar o cotovelo/joelho de lado num quadro
+            var qn = kv.Value.q;
+            if (getUpClock > 0.05f && kv.Key != "pelvis") qn = Quaternion.RotateTowards(p.transform.rotation, qn, 11f * Mathf.Rad2Deg * dt);
+            p.rb.position = kv.Value.p; p.rb.rotation = qn;
+            p.transform.SetPositionAndRotation(kv.Value.p, qn);
         }
         // fraco demais: ajoelhado, não aguenta e desaba
         if (getUpWillFail && getUpLungeKey > 0 && getUpClock >= gkT[getUpLungeKey] + 0.15f * getUpSlow)

@@ -26,6 +26,11 @@ Unity -batchmode -quit -projectPath . -executeMethod BuildTools.BuildWindows
 | `BonecoGore.exe --shots=<pasta>` | Capturas de tela (bonecos, feridas, fogo, levantar, viewmodel de cada arma, inventário e HUD) |
 | `BonecoGore.exe --cuttest --shots-cut=<pasta>` | Amputação em qualquer ponto do membro + comportamento de uma perna perdida (ver `docs/corpo-procedural.md`) |
 | `BonecoGore.exe --woundtest --shots-wound=<pasta>` | Tiros, buracos, sangue escorrendo, foice/machado/marreta, besta e arpão |
+| `BonecoGore.exe --blasttest --shots-blast=<pasta>` | C4 no peito/coxa/barriga/braço/cabeça e granada nos pés; **falha** se a pele virar "fita" (aresta > 12 cm esticada > 4×) |
+| `BonecoGore.exe --weapontest` | Puxão do arpão (boneco e parede), corda solta ao trocar de arma, virote segue o pedaço cortado, armas novas e sons |
+| `BonecoGore.exe --getuptest --shots-getup=<pasta>` | Levantar de bruços e de costas (tempo, giro, travadas, deslize dos apoios) e tentativa de levantar sem um pé |
+
+Os testes com critério imprimem `OK`/`FALHA` e terminam com `== <NOME>: N falha(s)`.
 
 O log fica em `%USERPROFILE%\AppData\LocalLow\Andraus\Boneco Gore Sandbox\Player.log`.
 
@@ -53,11 +58,11 @@ O log fica em `%USERPROFILE%\AppData\LocalLow\Andraus\Boneco Gore Sandbox\Player
 ### Armas
 | Tecla | Armas |
 |---|---|
-| 1 | Pistola 9mm · Revólver .357 · Pistola .50 |
+| 1 | Pistola 9mm · Revólver .357 · Pistola .50 · **Pistola de pregos** (prego crava; pente de 40) |
 | 2 | SMG · Fuzil · Carabina M4 · Bullpup (rajada de 3) |
 | 3 | Escopeta · Cano serrado |
-| 4 | Sniper .50 (direito = luneta) · **Arpão** (atravessa e prende; segure o direito para puxar o corpo, Q solta a corda) |
-| 5 | Arco (segure para puxar) · Facas de arremesso (direito = leque de 3) · **Besta** (virote, recarrega com Q) |
+| 4 | Sniper .50 (direito = luneta) · **Arpão** (prende em boneco, objeto ou parede; segure o direito para recolher a corda — puxa o corpo/objeto, ou puxa **você** até a parede; Q ou trocar de arma solta) |
+| 5 | Arco (segure para puxar) · Facas de arremesso (direito = leque de 3) · **Besta** (virote, recarrega na manivela com Q) · **Machadinha** de arremesso (gira e crava) |
 | 6 | Faca (corte / facada) · Espada · Lança · Foice (ceifada em arco) |
 | 7 | Machado · Marreta (contusão) · Montante (direito = varredura) |
 | 8 | Granada · **Lança-chamas** |
@@ -75,7 +80,9 @@ O log fica em `%USERPROFILE%\AppData\LocalLow\Andraus\Boneco Gore Sandbox\Player
 - **Dano** (`Dummy.Damage.cs`): balística por parte — o projétil atravessa a forma, perde energia em carne e osso, fratura ossos, perfura órgãos, rompe vasos e pode sair do outro lado. Amputação e destruição de partes, evisceração (`Fx/Guts.cs`).
 - **Fogo** (`Dummy.Fire.cs`): dose de queimadura por parte, fogo que se espalha para as vizinhas, pele carbonizando no shader, pânico (cai e rola para abafar) e morte por queimadura extensa.
 - **Em pé** (`Dummy.Stand.cs`): animação **procedural** — equilíbrio, reação por região do golpe, passo de recuperação (ponto de captura), marcha com IK nas pernas (rotação do quadril, contra-rotação dos ombros, peso no pé de apoio, rolamento calcanhar-ponta), respiração no ritmo da frequência respiratória, olhar para o jogador, medo (mãos para cima), mancar e segurar a ferida.
-- **Levantar**: detecta se caiu **de bruços** (flexão → quatro apoios → um joelho → em pé) ou **de costas** (senta com as mãos atrás → recolhe os joelhos → um joelho → em pé), sempre apoiado no chão; mais lento, tremendo ou falhando se estiver fraco.
+- **Levantar**: detecta se caiu **de bruços** (flexão → quatro apoios → um joelho → em pé) ou **de costas** (senta com as mãos atrás → recolhe os joelhos → um joelho → em pé). As poses-chave viram uma curva contínua (não para em cada pose), cada região do corpo tem seu atraso (cabeça e tronco puxam, braços empurram, pernas vêm depois), mãos e pés ficam presos no ponto de apoio (IK de dois ossos) e são reposicionados com um passo pelo ar. Fraco: mais lento, tremendo, pausa ajoelhado respirando, pode falhar. Sem um pé: tenta, não aguenta, cai e passa a se arrastar.
+- **Corte e explosão**: pele separada de forma rígida no corte (nenhum vértice preso aos dois pedaços), juntas religadas a partir da pose de repouso, tocos e fragmentos curtos travados. O tronco pode ser cortado na cintura ou no peito e a explosão forte abre a parede do tronco (buraco com tampa de carne + vísceras) — limiares em `Body/ImpactConfig.cs`.
+- **Feridas na pele**: decalques recortados da pele do próprio boneco, com os mesmos ossos (`Body/Dummy.Decals.cs`): acompanham amassados e somem sobre buracos e cortes.
 - **No chão** (`Dummy.Ground.cs`): agonia, rolar, rastejar, levar a mão à ferida, torniquete em si mesmo, espasmos ao morrer.
 
 ### Feridas (`Fx/WoundFx.cs`, shader `BG_Wound`)

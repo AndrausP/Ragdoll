@@ -270,7 +270,8 @@ public partial class Dummy
             curPose = "clutch";
         }
         else if (pf > 0.45f && U.Randf() < 0.75f) { action = "writhe"; actionDur = U.RandRange(2.5f, 5f); curPose = "writhe_a"; }
-        else if (legsBad && consciousness > 0.6f && paralysis != "tetraplegia" && U.Randf() < 0.6f) { action = "crawl"; actionDur = U.RandRange(5f, 9f); curPose = "crawl_l"; }
+        // já tentou levantar sem a perna e não conseguiu: arrastar-se com os braços vira a saída
+        else if (legsBad && consciousness > 0.6f && paralysis != "tetraplegia" && U.Randf() < (legTries > 0 ? 0.9f : 0.6f)) { action = "crawl"; actionDur = U.RandRange(5f, 9f); curPose = "crawl_l"; }
         else if (pf > 0.2f) { action = "fetal"; actionDur = U.RandRange(2.5f, 4.5f); curPose = "fetal"; }
         else { action = "rest"; actionDur = U.RandRange(2f, 4f); curPose = "limp"; }
     }

@@ -671,14 +671,25 @@ public partial class Dummy
         if (state != State.DOWN || dead || paralysis != "" || getUpCd > 0f) return;
         if (timeAlive - collapseTime < 3.5f || consciousness < 0.8f || pain > 0.75f) return;
         float b = balance; balance = 1f;
-        bool bad = ShouldCollapse();
+        string why = CollapseReason();
         balance = b;
-        if (bad || BalanceCap() < 0.4f) { getUpCd = 2f; return; }
+        // sem um pé/perna mas forte: tenta assim mesmo (até 2 vezes), não aguenta o peso e cai; depois rasteja
+        bool legTry = why == "perdeu a perna" && legTries < 2 && consciousness > 0.85f && pain < 0.6f && blood > Anatomy.BLOOD_TOTAL * 0.7f;
+        if (why != "" && !legTry || !legTry && BalanceCap() < 0.4f) { getUpCd = 2f; return; }
         if (Game.player != null && Game.player.grabBody != null && Game.player.grabBody.GetComponent<DummyPart>() is DummyPart gp && gp.dummy == this) return;
         getUpCd = 4f;
-        if (U.Randf() < 0.35f) return;
+        if (!legTry && U.Randf() < 0.35f) return;
         StartGetUp();
+        if (legTry && gettingUp)
+        {
+            legTries++;
+            getUpWillFail = true;
+            Game.LogEvent($"{dummyName} tenta levantar sem a perna", new Color(1f, 0.85f, 0.6f));
+        }
     }
+
+    int legTries;
+    public int LegTries => legTries;
 
     /// Começa a levantar (também usado pelas capturas de tela).
     public void StartGetUp()
@@ -722,6 +733,7 @@ public partial class Dummy
         gettingUp = true;
         getUpT = 0f;
         getUpSeg = 0;
+        BuildGetUpTimeline();
         muscleLevel = 0f;
         action = "none";
         Game.LogEvent($"{dummyName} tenta se levantar ({(getUpProne ? "de bruços" : "de costas")})", new Color(0.8f, 0.9f, 1f));
@@ -788,6 +800,204 @@ public partial class Dummy
     float getUpWeak;
     int getUpSeg;
 
+    // ---- linha do tempo contínua (pendência 08): as poses-chave viram uma curva de Hermite (a velocidade não zera em
+    // cada pose), cada região do corpo tem seu atraso (cabeça e tronco puxam, braços empurram, pernas vêm depois) e mãos
+    // e pés que tocam o chão ficam presos no ponto de apoio (IK de dois ossos) até saírem dele.
+    readonly List<float> gkT = new List<float>();
+    readonly List<Vector3> gkRootP = new List<Vector3>(), gkRootR = new List<Vector3>();
+    readonly List<Dictionary<string, Vector3>> gkJ = new List<Dictionary<string, Vector3>>();
+    float getUpClock, getUpEnd, getUpSlow = 1f;
+    int getUpLungeKey = -1;
+    class GetUpPin { public Vector3 at; public float w; public bool on; }
+    readonly Dictionary<string, GetUpPin> getUpPins = new Dictionary<string, GetUpPin>();
+    public float GetUpElapsed => getUpClock;      // testes
+
+    static Vector3 LogQ(Quaternion q)
+    {
+        q.ToAngleAxis(out float a, out Vector3 ax);
+        if (float.IsNaN(ax.x) || float.IsInfinity(ax.x) || Mathf.Abs(a) < 1e-4f) return Vector3.zero;
+        if (a > 180f) a -= 360f;
+        return ax.normalized * (a * Mathf.Deg2Rad);
+    }
+
+    static Quaternion ExpQ(Vector3 v)
+    {
+        float a = v.magnitude;
+        return a < 1e-6f ? Quaternion.identity : Quaternion.AngleAxis(a * Mathf.Rad2Deg, v / a);
+    }
+
+    /// Hermite cúbica por chaves com tempos próprios; tangente zero nas pontas (sai e chega parado).
+    Vector3 Curve(List<Vector3> k, float t)
+    {
+        int n = gkT.Count;
+        if (t <= gkT[0]) return k[0];
+        if (t >= gkT[n - 1]) return k[n - 1];
+        int i = 0;
+        while (i < n - 2 && t > gkT[i + 1]) i++;
+        float t0 = gkT[i], t1 = gkT[i + 1], dur = Mathf.Max(t1 - t0, 1e-4f);
+        float u = (t - t0) / dur;
+        Vector3 Tan(int j) => j <= 0 || j >= n - 1 ? Vector3.zero : (k[j + 1] - k[j - 1]) / Mathf.Max(gkT[j + 1] - gkT[j - 1], 1e-4f) * 0.85f;
+        float u2 = u * u, u3 = u2 * u;
+        return (2f * u3 - 3f * u2 + 1f) * k[i] + (u3 - 2f * u2 + u) * dur * Tan(i) + (-2f * u3 + 3f * u2) * k[i + 1] + (u3 - u2) * dur * Tan(i + 1);
+    }
+
+    /// Atraso (s) de cada região em relação ao relógio: negativo = sai na frente.
+    float GetUpDelay(string id)
+    {
+        float d;
+        if (id == "head" || id == "neck") d = -0.12f;
+        else if (id == "chest") d = -0.05f;
+        else if (id.StartsWith("upper_arm") || id.StartsWith("forearm") || id.StartsWith("hand")) d = getUpProne ? -0.06f : 0.02f;
+        else if (id.StartsWith("thigh")) d = 0.08f;
+        else if (id.StartsWith("shin")) d = 0.12f;
+        else if (id.StartsWith("foot")) d = 0.16f;
+        else d = 0f;
+        // lados levemente defasados: o corpo não é simétrico
+        if (id.EndsWith("_r")) d += 0.04f;
+        return d * getUpSlow;
+    }
+
+    void BuildGetUpTimeline()
+    {
+        var seq = getUpProne ? PRONE_SEQ : SUPINE_SEQ;
+        gkT.Clear(); gkRootP.Clear(); gkRootR.Clear(); gkJ.Clear(); getUpPins.Clear();
+        var invStand = Quaternion.Inverse(standRoot.q);
+        void Add(float t, Xf root, Dictionary<string, Vector3> j)
+        {
+            gkT.Add(t); gkRootP.Add(root.p); gkRootR.Add(LogQ(invStand * root.q)); gkJ.Add(j);
+        }
+        var j0 = new Dictionary<string, Vector3>();
+        foreach (var kv in getUpQ) j0[kv.Key] = LogQ(kv.Value);
+        Add(0f, getUpRoot, j0);
+        getUpSlow = 1f + getUpWeak * 1.3f;
+        float t = 0f;
+        getUpLungeKey = -1;
+        for (int i = 0; i < seq.Length; i++)
+        {
+            var k = seq[i];
+            var jk = new Dictionary<string, Vector3>();
+            foreach (var id in getUpQ.Keys) jk[id] = LogQ(KeyQ(k, id));
+            t += k.dur * getUpSlow;
+            Add(t, KeyRoot(k), jk);
+            if (i == seq.Length - 2)
+            {
+                getUpLungeKey = gkT.Count - 1;
+                // fraco: para ajoelhado, respira com a mão no joelho, e só então tenta ficar de pé
+                if (getUpWeak > 0.15f)
+                {
+                    t += Mathf.Lerp(0.3f, 1.3f, getUpWeak) * U.RandRange(0.8f, 1.2f);
+                    Add(t, KeyRoot(k), jk);
+                }
+            }
+        }
+        getUpEnd = t;
+        getUpClock = 0f;
+    }
+
+    /// IK de dois ossos no mundo: leva o pivô da ponta (pulso/tornozelo) até `target` com peso `w`. A ponta mantém a
+    /// rotação do mundo (palma/sola apoiada no chão continua apoiada).
+    void PinChain(Dictionary<string, Xf> xf, string a, string b, string c, Vector3 target, float w)
+    {
+        if (!xf.ContainsKey(a) || !xf.ContainsKey(b) || !xf.ContainsKey(c)) return;
+        var pa = parts[a]; var pb = parts[b]; var pc = parts[c];
+        var A = xf[a].Apply(pa.def.joint.anchor - pa.def.pos);
+        var B = xf[a].Apply(pb.def.joint.anchor - pa.def.pos);
+        var C = xf[b].Apply(pc.def.joint.anchor - pb.def.pos);
+        var T = Vector3.Lerp(C, target, w);
+        var mid = (A + C) * 0.5f;
+        var pole = B - mid; if (pole.sqrMagnitude < 1e-6f) pole = Vector3.forward;
+        var (qs, qe) = TwoBone(A, B, C, T, pole.normalized);
+        var xa = xf[a]; var xb = xf[b]; var xc = xf[c];
+        xf[a] = new Xf(qs * xa.q, A + qs * (xa.p - A));
+        var B2 = A + qs * (B - A);
+        var qb = qe * qs;
+        xf[b] = new Xf(qb * xb.q, B2 + qb * (xb.p - B));
+        var C2 = B2 + qb * (C - B);
+        xf[c] = new Xf(xc.q, C2 + (xc.p - C));
+    }
+
+    /// Levantar contínuo: amostra a curva, aplica os atrasos, encosta no chão, prende os apoios e escreve a pose.
+    void GetUpStep(float dt)
+    {
+        var seq = getUpProne ? PRONE_SEQ : SUPINE_SEQ;
+        getUpClock += dt;
+        float tr = Mathf.Min(getUpClock, getUpEnd);
+        var root = new Xf(standRoot.q * ExpQ(Curve(gkRootR, tr)), Curve(gkRootP, tr));
+        var q = new Dictionary<string, Quaternion>();
+        var tmp = new List<Vector3>(gkJ.Count);
+        foreach (var id in getUpQ.Keys)
+        {
+            tmp.Clear();
+            foreach (var j in gkJ) tmp.Add(j[id]);
+            q[id] = ExpQ(Curve(tmp, Mathf.Clamp(getUpClock - GetUpDelay(id), 0f, getUpEnd)));
+        }
+        // fase atual (para a falha e para o texto)
+        getUpSeg = 0;
+        while (getUpSeg < gkT.Count - 1 && tr > gkT[getUpSeg + 1]) getUpSeg++;
+        // respiração de esforço e tremor quando fraco
+        float effort = getUpClock < getUpEnd ? 1f : 0.4f;
+        float br = Mathf.Sin(timeAlive * (2.2f + getUpWeak * 2f)) * 0.025f * effort * (1f + getUpWeak);
+        if (q.ContainsKey("chest")) q["chest"] = q["chest"] * U.Euler(-br, 0, 0);
+        if (q.ContainsKey("abdomen")) q["abdomen"] = q["abdomen"] * U.Euler(br * 0.5f, 0, 0);
+        if (getUpWeak > 0.05f && getUpClock < getUpEnd)
+        {
+            float trm = getUpWeak * 0.035f;
+            foreach (var id in new[] { "upper_arm_l", "upper_arm_r", "thigh_l", "thigh_r", "abdomen" })
+                if (q.ContainsKey(id)) q[id] = q[id] * U.Euler(Mathf.Sin(timeAlive * 31f + id.Length) * trm, 0, Mathf.Sin(timeAlive * 23f + id.Length * 2f) * trm);
+        }
+        var xf = FK(root, q);
+        // o ponto mais baixo encosta no chão (mãos, joelhos ou pés de apoio): nada atravessa nem flutua
+        float lowest = float.MaxValue;
+        foreach (var kv in xf) lowest = Mathf.Min(lowest, kv.Value.p.y - parts[kv.Key].PartRadius() * 0.9f);
+        float lift = standRoot.p.y + 0.005f - lowest;
+        if (getUpClock < 0.3f) lift = Mathf.Max(lift, 0f);
+        foreach (var k in new List<string>(xf.Keys)) xf[k] = xf[k].Translated(new Vector3(0, lift, 0));
+        // apoios: mão/pé que chega ao chão fica preso até a curva tirá-lo de lá; nos últimos 0,35 s soltam para a
+        // pose em pé (sem pulo na passagem para a animação de andar)
+        float release = Mathf.Clamp01((getUpEnd - getUpClock) / 0.35f);
+        foreach (var (a, b, c) in new[] { ("upper_arm_l", "forearm_l", "hand_l"), ("upper_arm_r", "forearm_r", "hand_r"), ("thigh_l", "shin_l", "foot_l"), ("thigh_r", "shin_r", "foot_r") })
+        {
+            if (!xf.ContainsKey(c)) continue;
+            if (!getUpPins.TryGetValue(c, out var pin)) getUpPins[c] = pin = new GetUpPin();
+            var pc = parts[c]; var pb = parts[b];
+            float h = xf[c].p.y - pc.PartRadius() * 0.9f - standRoot.p.y;
+            var wrist = xf[b].Apply(pc.def.joint.anchor - pb.def.pos);
+            if (!pin.on && h < 0.035f && getUpClock > 0.15f) { pin.on = true; pin.at = wrist; }
+            else if (pin.on && h > 0.07f) pin.on = false;
+            pin.w = U.MoveToward(pin.w, pin.on ? 1f : 0f, dt / 0.12f);
+            float w = pin.w * release;
+            if (w > 1e-3f) PinChain(xf, a, b, c, pin.at, w);
+        }
+        foreach (var kv in xf)
+        {
+            var p = parts[kv.Key];
+            prevPos[kv.Key] = p.transform.position; prevRot[kv.Key] = p.transform.rotation;
+            p.rb.position = kv.Value.p; p.rb.rotation = kv.Value.q;
+            p.transform.SetPositionAndRotation(kv.Value.p, kv.Value.q);
+        }
+        // fraco demais: ajoelhado, não aguenta e desaba
+        if (getUpWillFail && getUpLungeKey > 0 && getUpClock >= gkT[getUpLungeKey] + 0.15f * getUpSlow)
+        {
+            fallReason = "não conseguiu se levantar";
+            Game.LogEvent($"{dummyName} não aguenta e cai de novo", new Color(1f, 0.75f, 0.5f));
+            getUpCd = 3f;
+            Collapse();
+            return;
+        }
+        float maxDelay = 0.16f * getUpSlow + 0.04f * getUpSlow;
+        if (getUpClock < getUpEnd + maxDelay) return;
+        gettingUp = false;
+        state = State.STANDING;
+        standTime = 0f;
+        balance = BalanceCap() * 0.6f;
+        stagger = flinch = flinchVel = Vector3.zero;
+        // chega meio desequilibrado: um pequeno ajuste de passo
+        staggerVel = new Vector3(U.RandRange(-0.3f, 0.3f), 0, U.RandRange(0.1f, 0.4f)) * (0.5f + getUpWeak);
+        hasGoal = false;
+        idleTimer = 0.5f;
+        Game.LogEvent($"{dummyName} ficou de pé de novo ({getUpClock:F1} s)", new Color(0.7f, 1f, 0.7f));
+    }
+
     /// Cinemática direta: a partir da pelve e das rotações locais, posiciona cada parte presa à junta do pai.
     Dictionary<string, Xf> FK(Xf root, Dictionary<string, Quaternion> q)
     {
@@ -812,74 +1022,6 @@ public partial class Dummy
     }
 
     static Quaternion KeyQ(GetUpKey k, string id) => k.j.TryGetValue(id, out var e) ? U.Euler(e) : Quaternion.identity;
-
-    /// Levantar por etapas: do pose do ragdoll para a 1ª etapa e de etapa em etapa, sempre com o corpo apoiado no chão.
-    void GetUpStep(float dt)
-    {
-        var seq = getUpProne ? PRONE_SEQ : SUPINE_SEQ;
-        var cur = seq[getUpSeg];
-        float speed = 1f / (1f + getUpWeak * 1.3f);
-        getUpT += dt * speed / cur.dur;
-        float s = U.Smoothstep(0, 1, Mathf.Clamp01(getUpT));
-        Xf root;
-        var q = new Dictionary<string, Quaternion>();
-        var to = KeyRoot(cur);
-        if (getUpSeg == 0)
-        {
-            root = getUpRoot.InterpolateWith(to, s);
-            foreach (var kv in getUpQ) q[kv.Key] = Quaternion.Slerp(kv.Value, KeyQ(cur, kv.Key), s);
-        }
-        else
-        {
-            var prev = seq[getUpSeg - 1];
-            root = KeyRoot(prev).InterpolateWith(to, s);
-            foreach (var kv in getUpQ) q[kv.Key] = Quaternion.Slerp(KeyQ(prev, kv.Key), KeyQ(cur, kv.Key), s);
-        }
-        // esforço: treme quando está fraco
-        if (getUpWeak > 0.05f && getUpSeg < seq.Length - 1)
-        {
-            float tr = getUpWeak * 0.035f;
-            foreach (var id in new[] { "upper_arm_l", "upper_arm_r", "thigh_l", "thigh_r", "abdomen" })
-                if (q.ContainsKey(id)) q[id] = q[id] * U.Euler(Mathf.Sin(timeAlive * 31f + id.Length) * tr, 0, Mathf.Sin(timeAlive * 23f + id.Length * 2f) * tr);
-        }
-        var xf = FK(root, q);
-        // o ponto mais baixo encosta no chão (mãos, joelhos ou pés de apoio): nada atravessa nem flutua
-        float lowest = float.MaxValue;
-        foreach (var kv in xf) lowest = Mathf.Min(lowest, kv.Value.p.y - parts[kv.Key].PartRadius() * 0.9f);
-        float lift = standRoot.p.y + 0.005f - lowest;
-        if (getUpSeg == 0 && s < 0.3f) lift = Mathf.Max(lift, 0f);
-        foreach (var kv in new List<KeyValuePair<string, Xf>>(xf))
-        {
-            var x = Mathf.Abs(lift) > 1e-4f ? kv.Value.Translated(new Vector3(0, lift, 0)) : kv.Value;
-            var p = parts[kv.Key];
-            prevPos[kv.Key] = p.transform.position; prevRot[kv.Key] = p.transform.rotation;
-            p.rb.position = x.p; p.rb.rotation = x.q;
-            p.transform.SetPositionAndRotation(x.p, x.q);
-        }
-        if (getUpT < 1f) return;
-        getUpT = 0f;
-        // fraco demais: ajoelhado, não aguenta e desaba
-        if (getUpWillFail && getUpSeg == seq.Length - 2)
-        {
-            fallReason = "não conseguiu se levantar";
-            Game.LogEvent($"{dummyName} não aguenta e cai de novo", new Color(1f, 0.75f, 0.5f));
-            getUpCd = 3f;
-            Collapse();
-            return;
-        }
-        getUpSeg++;
-        if (getUpSeg < seq.Length) return;
-        gettingUp = false;
-        state = State.STANDING;
-        standTime = 0f;
-        balance = BalanceCap() * 0.6f;
-        stagger = flinch = flinchVel = Vector3.zero;
-        // chega meio desequilibrado: um pequeno ajuste de passo
-        staggerVel = new Vector3(U.RandRange(-0.3f, 0.3f), 0, U.RandRange(0.1f, 0.4f)) * (0.5f + getUpWeak);
-        hasGoal = false;
-        idleTimer = 0.5f;
-        Game.LogEvent($"{dummyName} ficou de pé de novo", new Color(0.7f, 1f, 0.7f));
-    }
 
     // ------------------------------------------------------------------ cair
 

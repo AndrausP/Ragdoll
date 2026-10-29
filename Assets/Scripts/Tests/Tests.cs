@@ -1098,3 +1098,117 @@ public class WeaponTest : MonoBehaviour
         Application.Quit();
     }
 }
+
+/// Levantar do chão (--getuptest --shots-getup=<pasta>): pendência 08. De bruços e de costas, várias vezes; mede tempo,
+/// giro máximo, "travadas" no meio do movimento (o levantar antigo parava em cada pose) e escorregão dos apoios.
+public class GetUpTest : MonoBehaviour
+{
+    int fails;
+    void Check(bool ok, string what) { Debug.Log((ok ? "  OK    " : "  FALHA ") + what); if (!ok) fails++; }
+
+    IEnumerator Start()
+    {
+        yield return new WaitForSeconds(0.6f);
+        string dir = "";
+        foreach (var a in System.Environment.GetCommandLineArgs()) if (a.StartsWith("--shots-getup=")) dir = a.Substring(14);
+        Camera cam = null;
+        if (dir != "")
+        {
+            Directory.CreateDirectory(dir);
+            var go = new GameObject("getupcam"); cam = go.AddComponent<Camera>();
+            cam.fieldOfView = 50; cam.nearClipPlane = 0.03f; go.AddComponent<MirrorCamera>(); cam.depth = 10;
+        }
+        int ok = 0, runs = 8;
+        float worstW = 0f, worstSlide = 0f, tMin = 99f, tMax = 0f; int stallWorst = 0;
+        for (int run = 0; run < runs; run++)
+        {
+            foreach (var od in Game.dummies) if (od) Destroy(od.gameObject);
+            Game.dummies.Clear();
+            var d = Game.main.SpawnDummy(new Vector3(0f, 0.005f, -5f), Quaternion.Euler(0, run * 37f, 0));
+            d.holdStill = true;
+            yield return new WaitForSeconds(0.4f);
+            // de bruços nas rodadas pares, de costas nas ímpares
+            var fwd = d.transform.forward * (run % 2 == 0 ? 1f : -1f);
+            d.Collapse();
+            d.parts["chest"].rb.AddForce(fwd * 40f, ForceMode.Impulse);
+            yield return new WaitForSeconds(2.5f);
+            d.StartGetUp();
+            if (!d.gettingUp) { Check(false, $"rodada {run}: começou a levantar"); continue; }
+            var lastRot = new Dictionary<DummyPart, Quaternion>();
+            var lastPos = new Dictionary<DummyPart, Vector3>();
+            float t = 0f, maxW = 0f, slide = 0f; int stalls = 0;
+            int shot = 0; float nextShot = 0f;
+            bool snaps = cam != null && run < 2;
+            while (d.gettingUp && t < 12f)
+            {
+                yield return new WaitForFixedUpdate();
+                t += Time.fixedDeltaTime;
+                float sumW = 0f; int n = 0;
+                foreach (var p in d.ValidParts())
+                {
+                    if (p.severed) continue;
+                    var q = p.transform.rotation; var pos = p.transform.position;
+                    if (lastRot.TryGetValue(p, out var q0) && t > 0.1f)
+                    {
+                        float w = Quaternion.Angle(q0, q) * Mathf.Deg2Rad / Time.fixedDeltaTime;
+                        maxW = Mathf.Max(maxW, w); sumW += w; n++;
+                        // mão ou pé apoiado no chão: quanto ele desliza
+                        if ((p.partId.StartsWith("hand") || p.partId.StartsWith("foot")) && pos.y < 0.07f && lastPos[p].y < 0.07f)
+                        {
+                            var dv = pos - lastPos[p]; dv.y = 0f;
+                            slide = Mathf.Max(slide, dv.magnitude / Time.fixedDeltaTime);
+                        }
+                    }
+                    lastRot[p] = q; lastPos[p] = pos;
+                }
+                // "travada": o corpo inteiro quase parado no meio do levantar
+                if (n > 0 && t > 0.4f && t < 2.6f && sumW / n < 0.12f) stalls++;
+                if (snaps && t >= nextShot && shot < 8)
+                {
+                    nextShot += 0.5f;
+                    var c = d.parts["pelvis"].transform.position;
+                    var side = Quaternion.Euler(0, run * 37f + 90f, 0) * Vector3.forward;
+                    cam.transform.position = c + side * 2.2f + Vector3.up * 0.5f;
+                    cam.transform.rotation = Quaternion.LookRotation(c + Vector3.up * 0.2f - cam.transform.position);
+                    yield return new WaitForEndOfFrame();
+                    ScreenCapture.CaptureScreenshot(Path.Combine(dir, $"levantar_{(run == 0 ? "brucos" : "costas")}_{shot}.png"));
+                    shot++;
+                }
+            }
+            bool stood = d.state == Dummy.State.STANDING && !d.gettingUp;
+            if (stood) { ok++; tMin = Mathf.Min(tMin, t); tMax = Mathf.Max(tMax, t); }
+            worstW = Mathf.Max(worstW, maxW); worstSlide = Mathf.Max(worstSlide, slide); stallWorst = Mathf.Max(stallWorst, stalls);
+            Debug.Log($"[levantar] rodada {run} ({(run % 2 == 0 ? "de bruços" : "de costas")}): em pé={stood} tempo={t:F2}s giro máx={maxW:F1} rad/s travadas={stalls} deslize apoio={slide:F2} m/s pelve y={d.parts["pelvis"].transform.position.y:F2}");
+        }
+        Check(ok == runs, $"levantou em {ok}/{runs} tentativas");
+        Check(tMin >= 1.8f && tMax <= 4.6f, $"tempo do levantar entre 1,8 e 4,6 s (min {tMin:F2}, máx {tMax:F2})");
+        Check(worstW < 14f, $"sem giro brusco de junta (máx {worstW:F1} rad/s)");
+        Check(stallWorst <= 2, $"movimento contínuo, sem travar entre as poses ({stallWorst} quadros parados no meio)");
+        Check(worstSlide < 0.6f, $"mão/pé apoiado não escorrega (máx {worstSlide:F2} m/s)");
+
+        // ---- sem a perna: tenta, cai e rasteja
+        {
+            foreach (var od in Game.dummies) if (od) Destroy(od.gameObject);
+            Game.dummies.Clear();
+            var d = Game.main.SpawnDummy(new Vector3(0f, 0.005f, -5f), Quaternion.identity);
+            yield return new WaitForSeconds(0.4f);
+            var sh = d.parts["shin_l"];
+            d.CutAt(sh, sh.Xform.Apply(new Vector3(0f, 0.05f, 0f)), Vector3.right, 0f);
+            // torniquete: o teste é do comportamento, não da hemorragia
+            d.parts["thigh_l"].tourniquet = true;
+            float t = 0f; bool tried = false, crawled = false;
+            while (t < 45f && !(tried && crawled))
+            {
+                yield return new WaitForSeconds(0.25f); t += 0.25f;
+                d.pain = Mathf.Min(d.pain, 0.3f); d.acutePain = 0f;
+                if (d.LegTries > 0) tried = true;
+                if (tried && d.action == "crawl") crawled = true;
+            }
+            Debug.Log($"[sem perna] tentou levantar={tried} ({d.LegTries}x) rastejou depois={crawled} t={t:F0}s estado={d.StatusText()}");
+            Check(tried, "sem um pé: tenta levantar");
+            Check(crawled, "depois de não aguentar o peso, se arrasta com os braços");
+        }
+        Debug.Log($"== LEVANTAR: {fails} falha(s)");
+        Application.Quit();
+    }
+}

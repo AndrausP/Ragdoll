@@ -194,7 +194,8 @@ public partial class Dummy
 
         var opt = new CutOptions { capNormal = axis, distMap = distMap, proxMap = proxMap, capDepth = torso ? 0.03f : 0.014f, proxCapBone = p.boneIndex, distCapBone = newBone };
         if (torso) { opt.boneRadius = 0.022f; opt.irregular = 1f; }
-        var info = MeshCut.Cut(bodyData, f, opt, out _);
+        var info = MeshCut.Cut(bodyData, f, opt, out var sides);
+        DecalsAfterCut(sides);
         if (clothData != null)
         {
             var fc = CutField(clothData, region, axis, s, ragged, centerRest, seed, torso ? below : null);
@@ -215,6 +216,7 @@ public partial class Dummy
         meshVertsDirty = meshTopoDirty = false;
         skinBody.bones = skinBones.ToArray();
         if (skinCloth) skinCloth.bones = skinBones.ToArray();
+        RefreshDecals(true);
 
         // ---- física: o corpo cai e o fragmento ganha vida própria
         if (state == State.STANDING) Collapse();
@@ -390,6 +392,7 @@ public partial class Dummy
             var at = lp + p.def.pos;
             var opt = new CutOptions { capDepth = 0.05f, irregular = 1f, coreColor = new Color(0.36f, 0.05f, 0.06f) };
             bool holed = MeshCut.Crater(bodyData, at, nl, r, opt, true, p.boneIndex);
+            if (holed) DecalsAfterCrater(at, nl, r);
             if (clothData != null) MeshCut.Crater(clothData, at, nl, r * 1.3f, new CutOptions(), false, p.boneIndex);
             if (holed)
             {

@@ -4,7 +4,8 @@ using UnityEngine;
 /// Evisceração: alças de intestino (corda Verlet presa na ferida) e pedaços de órgão que saem do corpo.
 public static class Guts
 {
-    public static readonly Color C_GUT = new Color(0.86f, 0.55f, 0.5f), C_GUT_DARK = new Color(0.6f, 0.22f, 0.22f);
+    // víscera molhada e suja de sangue: bem mais vermelha que a pele, para as alças não parecerem membros esticados
+    public static readonly Color C_GUT = new Color(0.74f, 0.34f, 0.33f), C_GUT_DARK = new Color(0.38f, 0.06f, 0.07f);
     public const int MAX_PER_PART = 2, MAX_CHAINS = 24;
     static readonly List<GutRope> chains = new List<GutRope>();
 
@@ -102,8 +103,11 @@ public class GutRope : MonoBehaviour
         segs = new Transform[n];
         for (int i = 0; i < n; i++)
         {
-            var c = Color.Lerp(Guts.C_GUT, Guts.C_GUT_DARK, i % 3 == 2 ? 0.4f : U.Randf() * 0.15f);
+            var c = Color.Lerp(Guts.C_GUT, Guts.C_GUT_DARK, i % 3 == 2 ? 0.55f : U.Randf() * 0.3f);
             segs[i] = Prims.Visual("seg", mesh, Mats.Wet(c), transform).transform;
+            // gomos: alças alternam de espessura, como intestino de verdade
+            float bulge = i % 2 == 0 ? 1.18f : 0.85f;
+            segs[i].localScale = new Vector3(bulge, 1f, bulge);
         }
         GroundAll();
         Draw();

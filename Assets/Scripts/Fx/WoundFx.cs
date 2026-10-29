@@ -136,9 +136,19 @@ public static class WoundFx
             t = rot * t;
         }
         var tex = Tex(kind);
-        var mesh = BuildPatch(part, w.localPos, n, t, half, Vector2.zero, 0.0012f);
-        if (mesh == null) return false;
-        var go = Prims.Visual("ferida_" + kind, mesh, MakeMat(tex, gloss), part.transform, false);
+        var dm = part.dummy;
+        bool onSkin = dm != null && dm.CanSkinDecal(part);
+        var restC = w.localPos + part.def.pos;
+        // várias feridas iguais no mesmo ponto (estilhaços, rajada): um decalque só
+        if (onSkin && dm.DecalNear(restC, kind, Mathf.Min(half.x, half.y) * 0.8f)) return true;
+        GameObject go;
+        if (onSkin) go = dm.AddSkinDecal(part, restC, n, t, half, 0.0012f, MakeMat(tex, gloss), false, kind);
+        else
+        {
+            var mesh = BuildPatch(part, w.localPos, n, t, half, Vector2.zero, 0.0012f);
+            go = mesh != null ? Prims.Visual("ferida_" + kind, mesh, MakeMat(tex, gloss), part.transform, false) : null;
+        }
+        if (go == null) return false;
         w.visual = go;
         // filete de sangue que escorre (as feridas que sangram)
         if (kind != "contusão" && kind != "queimadura" && kind != "toco")
@@ -146,17 +156,25 @@ public static class WoundFx
             float len = U.RandRange(0.07f, 0.14f) * (kind == "saída" || kind == "machado" ? 1.4f : 1f);
             var tt = Vector3.Cross(down, n).normalized;
             var hc = new Vector2(U.RandRange(0.006f, 0.01f) * (half.x > 0.03f ? 1.6f : 1f), len * 0.5f);
-            var tm = BuildPatch(part, w.localPos + down * (len * 0.5f - half.y * 0.3f), n, tt, hc, Vector2.zero, 0.0016f);
-            if (tm != null)
+            var tc = w.localPos + down * (len * 0.5f - half.y * 0.3f);
+            var mat = MakeMat(trickles[U.RandInt(0, VARIANTS - 1)], 0.8f);
+            mat.SetFloat("_Grow", 0.05f);
+            // o plano tem uv.y crescendo para baixo: inverte (1 na ferida, 0 na ponta, como a textura)
+            if (onSkin)
             {
-                // o plano tem uv.y crescendo para baixo: inverte (1 na ferida, 0 na ponta, como a textura)
-                var uvs = new List<Vector2>(); tm.GetUVs(0, uvs);
-                for (int i = 0; i < uvs.Count; i++) uvs[i] = new Vector2(uvs[i].x, 1f - uvs[i].y);
-                tm.SetUVs(0, uvs);
-                var mat = MakeMat(trickles[U.RandInt(0, VARIANTS - 1)], 0.8f);
-                mat.SetFloat("_Grow", 0.05f);
-                Prims.Visual("filete", tm, mat, part.transform, false);
-                w.trickle = mat;
+                if (dm.AddSkinDecal(part, tc + part.def.pos, n, tt, hc, 0.0016f, mat, true, "filete") != null) w.trickle = mat;
+            }
+            else
+            {
+                var tm = BuildPatch(part, tc, n, tt, hc, Vector2.zero, 0.0016f);
+                if (tm != null)
+                {
+                    var uvs = new List<Vector2>(); tm.GetUVs(0, uvs);
+                    for (int i = 0; i < uvs.Count; i++) uvs[i] = new Vector2(uvs[i].x, 1f - uvs[i].y);
+                    tm.SetUVs(0, uvs);
+                    Prims.Visual("filete", tm, mat, part.transform, false);
+                    w.trickle = mat;
+                }
             }
         }
         return true;

@@ -47,6 +47,7 @@ public class MainScene : MonoBehaviour
         if (Game.cutTest) gameObject.AddComponent<CutTest>();
         if (Game.woundTest) gameObject.AddComponent<WoundTest>();
         if (Game.blastTest) gameObject.AddComponent<BlastTest>();
+        if (Game.weaponTest) gameObject.AddComponent<WeaponTest>();
     }
 
     void SpawnDefaults()

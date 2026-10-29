@@ -5,6 +5,9 @@
   harpoon   : arpão (arma de mergulho) feito aqui, a partir de primitivas
   bolt      : virote da besta (projétil)
   harpoon_bolt : arpão (projétil), com farpas e argola para a corda
+  nailgun   : pistola de pregos (feita aqui, primitivas)
+  nail      : prego (projétil)
+  hatchet   : machadinha de arremesso (feita aqui; em pé em +Y como as armas brancas, gume em +X)
 
 Convenção do arquivo (igual às armas de fogo existentes): cano em +X, topo em +Y, largura em Z.
 Projéteis: comprimento em +Z com a ponta em +Z (igual à "arrow").
@@ -178,6 +181,48 @@ def harpoon_bolt():
     return b.mesh()
 
 
+def nailgun():
+    b = Builder()
+    # corpo, cilindro do pistão e bico
+    b.box('Orange', (0.42, 0.20, 0), (1.10, 0.34, 0.20))
+    b.box('Black', (0.42, 0.40, 0), (0.95, 0.06, 0.16))
+    b.cone('DarkMetal', (0.97, 0.18, 0), (1.32, 0.18, 0), 0.085, 0.07, seg=16)
+    b.cone('LightSteel', (1.32, 0.18, 0), (1.52, 0.18, 0), 0.05, 0.035, seg=12)
+    b.box('Black', (1.10, 0.05, 0), (0.30, 0.10, 0.16))
+    # pente de pregos inclinado sob o bico
+    b.box('LightMetal', (0.78, -0.16, 0), (0.70, 0.12, 0.07), rot_z=-14)
+    b.box('Steel', (0.78, -0.24, 0), (0.66, 0.05, 0.05), rot_z=-14)
+    # empunhadura emborrachada, gatilho, bateria
+    b.box('Black', (-0.02, -0.22, 0), (0.17, 0.52, 0.15), rot_z=12)
+    b.box('DarkMetal', (0.15, -0.06, 0), (0.05, 0.14, 0.05), rot_z=12)
+    b.box('Orange', (-0.10, -0.52, 0), (0.36, 0.14, 0.24))
+    b.box('Black', (-0.10, -0.60, 0), (0.38, 0.03, 0.25))
+    return b.mesh()
+
+
+def nail():
+    b = Builder()
+    b.cone('Steel', (0, 0, 0.05), (0, 0, 2.0), 0.030, 0.030, seg=8)
+    b.cone('Steel', (0, 0, 2.0), (0, 0, 2.25), 0.030, 0.0, seg=8)
+    b.cone('LightSteel', (0, 0, 0.0), (0, 0, 0.06), 0.095, 0.095, seg=12)
+    return b.mesh()
+
+
+def hatchet():
+    b = Builder()
+    # cabo de madeira (em pé em +Y), com empunhadura enrolada
+    b.cone('LightWood', (0, -1.15, 0), (0, 1.35, 0), 0.075, 0.065, seg=12)
+    b.cone('Black', (0, -1.10, 0), (0, -0.35, 0), 0.085, 0.085, seg=12)
+    # cabeça: olho, lâmina em leque para +X e martelo atrás
+    b.box('DarkMetal', (0.0, 1.18, 0), (0.30, 0.34, 0.16))
+    b.box('Steel', (0.36, 1.18, 0), (0.46, 0.30, 0.09))
+    b.box('LightSteel', (0.66, 1.18, 0), (0.18, 0.62, 0.04))
+    b.box('LightSteel', (0.55, 1.36, 0), (0.30, 0.10, 0.05), rot_z=-30)
+    b.box('LightSteel', (0.55, 1.00, 0), (0.30, 0.10, 0.05), rot_z=30)
+    b.box('DarkMetal', (-0.24, 1.18, 0), (0.16, 0.22, 0.14))
+    return b.mesh()
+
+
 def node_trs(nd):
     x, y, z, w = nd.get('rotation', [0, 0, 0, 1])
     R = np.array([[1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
@@ -213,7 +258,8 @@ def crossbow():
 
 def main():
     m = read_bgm(OUT)
-    for name, fn in (('crossbow', crossbow), ('harpoon', harpoon_gun), ('bolt', bolt), ('harpoon_bolt', harpoon_bolt)):
+    for name, fn in (('crossbow', crossbow), ('harpoon', harpoon_gun), ('bolt', bolt), ('harpoon_bolt', harpoon_bolt),
+                     ('nailgun', nailgun), ('nail', nail), ('hatchet', hatchet)):
         mesh = fn()
         p = mesh['pos']
         print(f'{name}: {len(p)} vértices, caixa {p.min(0).round(2)} .. {p.max(0).round(2)}')

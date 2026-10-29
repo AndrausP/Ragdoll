@@ -263,8 +263,9 @@ public class Player : MonoBehaviour
         { "deagle", new[] { 0.25f, -0.58f, 0.2f, -0.12f, 0.2f } },
         { "m4", new[] { 0.72f, -0.98f, 0.2f, -0.13f, 0.3f } },
         { "bullpup", new[] { 0.62f, -0.95f, 0.2f, -0.13f, 0.3f } },
-        { "crossbow", new[] { 0.62f, -0.95f, 0.2f, -0.10f, 0.3f } },
+        { "crossbow", new[] { 0.56f, -1.02f, 0.17f, -0.14f, 0.3f } },
         { "harpoon", new[] { 1.05f, -1.25f, 0.2f, -0.12f, 0.3f } },
+        { "nailgun", new[] { 0.24f, -0.58f, 0.2f, -0.13f, 0.2f } },
     };
 
     /// Onde as mãos pegam: cabo (fração do cano até a coronha, fração do topo até a base), inclinação do cabo (graus)
@@ -283,8 +284,9 @@ public class Player : MonoBehaviour
         { "deagle", new[] { 0.5f, 1f, 0.45f, 16f, -1f } },
         { "m4", new[] { 0.56f, 0.72f, 0.5f, 12f, 0.3f } },
         { "bullpup", new[] { 0.36f, 0.52f, 0.5f, 12f, 0.13f } },
-        { "crossbow", new[] { 0.55f, 0.85f, 0.4f, 8f, 0.3f } },
+        { "crossbow", new[] { 0.6f, 0.9f, 0.45f, 6f, 0.22f } },
         { "harpoon", new[] { 0.62f, 0.92f, 0.35f, 16f, 0.28f } },
+        { "nailgun", new[] { 0.5f, 1f, 0.45f, 14f, -1f } },
     };
 
     /// Centro dos vértices do modelo (no espaço de root) numa fatia: z0..z1 do cano à coronha, y abaixo de yMin (do topo).
@@ -316,6 +318,7 @@ public class Player : MonoBehaviour
         { "claymore", new[] { 1.05f, 0.08f, 0.22f, -0.28f, -0.44f, 0.5f } },
         { "scythe", new[] { 1.2f, 0.3f, 0.20f, -0.30f, -0.45f, 0.9f, 1.5708f } },
         { "throwknife", new[] { 0.28f, 0.18f, 0.2f, -0.22f, -0.4f, 0.9f } },
+        { "hatchet", new[] { 0.36f, 0.2f, 0.21f, -0.22f, -0.41f, 0.6f } },
     };
 
     /// Arma cujo modelo tem outro nome no arquivo
@@ -528,7 +531,8 @@ public class Player : MonoBehaviour
         float accel = onFloor ? 12f : 3f;
         velocity.x = U.MoveToward(velocity.x, dir.x * speed, accel * speed * dt);
         velocity.z = U.MoveToward(velocity.z, dir.z * speed, accel * speed * dt);
-        cc.Move(velocity * dt);
+        cc.Move((velocity + extVel) * dt);
+        extVel = Vector3.MoveTowards(extVel, Vector3.zero, (onFloor ? 9f : 3f) * dt);
         bool moving = onFloor && dir.magnitude > 0.1f;
         if (moving)
         {
@@ -610,19 +614,19 @@ public class Player : MonoBehaviour
                 else if (captured && InputX.Down(InputX.A.Reload) && ammo[w.id] < w.mag) StartReload(w);
                 else if (cooldown <= 0f && (fireJust || altJust))
                 {
-                    if (ammo[w.id] <= 0) { Game.hud?.Toast("Sem facas — Q para recolher"); cooldown = 0.3f; }
+                    if (ammo[w.id] <= 0) { Game.hud?.Toast(w.id == "hatchet" ? "Sem machadinhas — Q para recolher" : "Sem facas — Q para recolher"); cooldown = 0.3f; }
                     else
                     {
-                        int n = altJust ? Mathf.Min(3, ammo[w.id]) : 1;
+                        int n = altJust && w.id == "throwknife" ? Mathf.Min(3, ammo[w.id]) : 1;
                         for (int i = 0; i < n; i++)
                         {
                             float yawOff = n > 1 ? (i - 1) * 0.09f : 0f;
                             var d = U.Axis(Vector3.up, yawOff) * CamFwd;
-                            ThrowKnife(camNode.position + CamFwd * 0.35f + camNode.rotation * new Vector3(0.12f, -0.05f, 0f), d);
+                            ThrowKnife(camNode.position + CamFwd * 0.35f + camNode.rotation * new Vector3(0.12f, -0.05f, 0f), d, w.id == "hatchet");
                         }
                         ammo[w.id] -= n;
                         swingT = 0f; swingKind = "throw";
-                        cooldown = altJust ? 0.7f : 0.4f;
+                        cooldown = w.id == "hatchet" ? 0.65f : altJust ? 0.7f : 0.4f;
                     }
                 }
                 if (Game.hud) Game.hud.SetAmmo(ammo[w.id], w.mag, reloadT);
@@ -694,6 +698,13 @@ public class Player : MonoBehaviour
         if (reloadT >= 0f || w.mag <= 0) return;
         reloadT = 0f;
         // gravação da recarga inteira quando existe; senão os cliques sintetizados ao longo da recarga
+        if (w.id == "crossbow" || w.id == "harpoon")
+        {
+            // besta: engatilha a corda na manivela; arpão: estica os elásticos e encaixa a haste
+            recordedReload = true;
+            Game.sfx.PlayUI(w.id == "crossbow" ? "crossbow_load" : "harpoon_load", -5f, U.RandRange(0.96f, 1.04f));
+            return;
+        }
         string rec = w.id == "shotgun" || w.id == "sawedoff" ? "" : (w.id == "rifle" || w.id == "sniper" ? "reload_rifle" : "reload_pistol");
         recordedReload = rec != "" && Game.sfx.Has(rec);
         if (recordedReload) Game.sfx.PlayUI(rec, -6f, U.RandRange(0.97f, 1.03f) * Mathf.Clamp(1.6f / w.reload, 0.75f, 1.1f));
@@ -706,6 +717,7 @@ public class Player : MonoBehaviour
         reloadT += dt / w.reload;
         if (before < 0.55f && reloadT >= 0.55f && !recordedReload) Game.sfx.PlayUI("mag_in", -7f, U.RandRange(0.95f, 1.05f));
         if (before < 0.82f && reloadT >= 0.82f && (!recordedReload || w.id == "sniper")) Game.sfx.PlayUI("rack", -7f, U.RandRange(0.95f, 1.05f));
+        if (before < 0.9f && reloadT >= 0.9f && (w.id == "crossbow" || w.id == "harpoon")) Game.sfx.PlayUI("click", -8f, 0.7f);
         if (reloadT >= 1f) { reloadT = -1f; ammo[w.id] = w.mag; cooldown = 0.1f; }
     }
 
@@ -792,11 +804,20 @@ public class Player : MonoBehaviour
         }
     }
 
-    void ThrowKnife(Vector3 from, Vector3 dir)
+    void ThrowKnife(Vector3 from, Vector3 dir, bool hatchet = false)
     {
-        var a = new GameObject("faca").AddComponent<Arrow>();
-        a.Launch(from, dir * 22f + velocity + Vector3.up * 0.8f, 135f, selfEx, Weapons.P_THROW_KNIFE, "dagger");
-        Game.sfx.PlayUI("throw", -6f, U.RandRange(1.1f, 1.3f));
+        var a = new GameObject(hatchet ? "machadinha" : "faca").AddComponent<Arrow>();
+        if (hatchet) a.Launch(from, dir * 17f + velocity + Vector3.up * 1.2f, 260f, selfEx, Weapons.P_HATCHET, "hatchet");
+        else a.Launch(from, dir * 22f + velocity + Vector3.up * 0.8f, 135f, selfEx, Weapons.P_THROW_KNIFE, "dagger");
+        Game.sfx.PlayUI("throw", hatchet ? -3f : -6f, hatchet ? U.RandRange(0.75f, 0.85f) : U.RandRange(1.1f, 1.3f));
+    }
+
+    /// Corda do arpão presa em parede: puxa o jogador até o ponto (velocidade externa somada ao movimento).
+    Vector3 extVel;
+    public void Pull(Vector3 dv)
+    {
+        extVel = Vector3.ClampMagnitude(extVel + new Vector3(dv.x, 0f, dv.z), 9f);
+        if (dv.y > 0f) velocity.y = Mathf.Max(velocity.y, dv.y * 6f);
     }
 
     float fuel;
@@ -976,8 +997,25 @@ public class Player : MonoBehaviour
         if (reloadT >= 0f)
         {
             float r = Mathf.Sin(Mathf.Clamp01(reloadT) * Mathf.PI);
-            pos += new Vector3(-0.04f * r, -0.12f * r, 0.05f * r);
-            rot += new Vector3(0.45f * r, 0.15f * r, 0.7f * r);
+            if (w.id == "crossbow")
+            {
+                // ponta para baixo e para perto, manivela girando (tremor rítmico), sem inclinar de lado
+                float crank = Mathf.Sin(reloadT * 40f) * 0.03f * r;
+                pos += new Vector3(-0.02f * r, -0.1f * r + crank, 0.12f * r);
+                rot += new Vector3(-0.9f * r, 0.1f * r, 0.05f * r);
+            }
+            else if (w.id == "harpoon")
+            {
+                // boca para cima, arma puxada para o peito; no fim empurra a haste para dentro
+                float push = reloadT > 0.75f ? Mathf.Sin((reloadT - 0.75f) / 0.25f * Mathf.PI) * 0.06f : 0f;
+                pos += new Vector3(-0.06f * r, -0.04f * r, 0.18f * r - push);
+                rot += new Vector3(0.75f * r, 0.2f * r, 0.15f * r);
+            }
+            else
+            {
+                pos += new Vector3(-0.04f * r, -0.12f * r, 0.05f * r);
+                rot += new Vector3(0.45f * r, 0.15f * r, 0.7f * r);
+            }
         }
         if (w.id == "bow" && bowParts.ContainsKey("string"))
         {

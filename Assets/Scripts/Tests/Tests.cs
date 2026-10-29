@@ -990,3 +990,111 @@ public class BlastTest : MonoBehaviour
         yield return null;
     }
 }
+
+/// Armas novas e corda do arpão (--weapontest): pendência 03, com critério de falha.
+public class WeaponTest : MonoBehaviour
+{
+    int fails;
+    void Check(bool ok, string what) { Debug.Log((ok ? "  OK    " : "  FALHA ") + what); if (!ok) fails++; }
+
+    static void Select(string id) => Game.player.SelectWeapon(Weapons.LIST.IndexOf(Weapons.ById(id)));
+
+    static Arrow Shoot(string model, Prof prof, float energy, float speed, Vector3 from, Vector3 at, bool tether)
+    {
+        var a = new GameObject(model).AddComponent<Arrow>();
+        a.tether = tether;
+        a.Launch(from, (at - from).normalized * speed, energy, null, prof, model);
+        return a;
+    }
+
+    static int Wounds(Dummy d) { int n = 0; foreach (var p in d.ValidParts()) n += p.wounds.Count; return n; }
+
+    IEnumerator Start()
+    {
+        yield return new WaitForSeconds(0.6f);
+        foreach (var od in Game.dummies) if (od) Destroy(od.gameObject);
+        Game.dummies.Clear();
+        var pl = Game.player;
+        // ---- arpão no boneco: puxão
+        var d = Game.main.SpawnDummy(new Vector3(0f, 0.005f, -5f), Quaternion.identity);
+        d.holdStill = true;
+        yield return new WaitForSeconds(0.4f);
+        Select("harpoon");
+        yield return new WaitForSeconds(0.3f);
+        Shoot("harpoon_bolt", Weapons.P_HARPOON, 520f, 64f, pl.RopeOrigin, d.parts["chest"].transform.position, true);
+        yield return new WaitForSeconds(0.5f);
+        var rope = Object.FindAnyObjectByType<HarpoonRope>();
+        Check(rope != null, "arpão cravado no boneco prende a corda");
+        if (rope != null)
+        {
+            float d0 = Vector3.Distance(pl.transform.position, d.parts["chest"].transform.position);
+            HarpoonRope.testPull = true;
+            yield return new WaitForSeconds(3f);
+            HarpoonRope.testPull = false;
+            float d1 = Vector3.Distance(pl.transform.position, d.parts["chest"].transform.position);
+            Debug.Log($"[arpão] boneco: distância {d0:F1} m -> {d1:F1} m");
+            Check(d1 < d0 - 2f, $"segurar o direito puxa o corpo ({d0:F1} -> {d1:F1} m)");
+            Check(d1 > 0.6f, "o corpo para perto do jogador (corda curta não puxa mais)");
+            Select("pistol");
+            yield return new WaitForSeconds(0.9f);
+            Check(Object.FindAnyObjectByType<HarpoonRope>() == null, "trocar de arma solta a corda");
+        }
+        // ---- arpão na parede: puxa o jogador
+        Select("harpoon");
+        yield return new WaitForSeconds(0.3f);
+        var hit = Phys.Ray(pl.RopeOrigin, pl.RopeOrigin + Vector3.right * 60f, Game.L_WORLD);
+        Check(hit.hit, "parede à direita para o teste");
+        if (hit.hit)
+        {
+            var p0 = pl.transform.position;
+            Shoot("harpoon_bolt", Weapons.P_HARPOON, 520f, 64f, pl.RopeOrigin, hit.position, true);
+            yield return new WaitForSeconds(Vector3.Distance(p0, hit.position) / 64f + 0.4f);
+            Check(Object.FindAnyObjectByType<HarpoonRope>() != null, "arpão cravado na parede prende a corda");
+            HarpoonRope.testPull = true;
+            yield return new WaitForSeconds(2f);
+            HarpoonRope.testPull = false;
+            float moved = Vector3.Dot(pl.transform.position - p0, Vector3.right);
+            Debug.Log($"[arpão] parede: jogador andou {moved:F1} m na direção do arpão");
+            Check(moved > 1.5f, $"corda na parede puxa o jogador ({moved:F1} m)");
+            pl.transform.position = p0;
+            Select("pistol");
+            yield return new WaitForSeconds(0.9f);
+        }
+        // ---- virote cravado segue o pedaço cortado
+        Destroy(d.gameObject); Game.dummies.Clear();
+        d = Game.main.SpawnDummy(new Vector3(0f, 0.005f, -5f), Quaternion.identity);
+        d.holdStill = true;
+        yield return new WaitForSeconds(0.4f);
+        var fa = d.parts["forearm_r"];
+        var target = fa.Xform.Apply(new Vector3(0f, -0.07f, 0f));
+        var bolt = Shoot("bolt", Weapons.P_BOLT, 300f, 78f, target + new Vector3(0f, 0.05f, 3f), target, false);
+        yield return new WaitForSeconds(0.25f);
+        Check(bolt != null && bolt.stuck && bolt.transform.parent == fa.transform, "virote crava no antebraço");
+        if (bolt != null && bolt.stuck)
+        {
+            d.CutAt(fa, fa.Xform.Apply(new Vector3(0f, 0.05f, 0f)), Vector3.right, 0f);
+            yield return null;
+            var parentPart = bolt.transform.parent ? bolt.transform.parent.GetComponent<DummyPart>() : null;
+            Check(parentPart != null && parentPart.fragment, "virote vai junto com o pedaço cortado");
+        }
+        // ---- pistola de pregos, machadinha e besta acertam e ferem
+        foreach (var (model, prof, e, v, label) in new[] {
+            ("nail", Weapons.P_NAIL, 95f, 48f, "prego"), ("hatchet", Weapons.P_HATCHET, 260f, 17f, "machadinha"), ("bolt", Weapons.P_BOLT, 300f, 78f, "virote") })
+        {
+            Destroy(d.gameObject); Game.dummies.Clear();
+            d = Game.main.SpawnDummy(new Vector3(0f, 0.005f, -2f), Quaternion.identity);
+            d.holdStill = true;
+            yield return new WaitForSeconds(0.4f);
+            int w0 = Wounds(d);
+            var at = d.parts["abdomen"].transform.position;
+            Shoot(model, prof, e, v, at + new Vector3(0f, 0.15f, 2.5f), at, false);
+            yield return new WaitForSeconds(0.6f);
+            Check(Wounds(d) > w0, $"{label} acerta e fere o boneco");
+        }
+        Check(MeshStore.Weapon("nailgun") != null && MeshStore.Weapon("hatchet") != null && MeshStore.Weapon("nail") != null, "modelos novos no arquivo de armas");
+        foreach (var snd in new[] { "crossbow", "harpoon", "nailgun", "winch", "crossbow_load", "harpoon_load" })
+            Check(Game.sfx.Has(snd), $"som próprio: {snd}");
+        Debug.Log($"== ARMAS: {fails} falha(s)");
+        Application.Quit();
+    }
+}

@@ -398,6 +398,7 @@ public partial class Dummy
             if (c && c.joint != null && !c.cutHere) { Destroy(c.joint); c.joint = null; c.cutHere = true; c.severed = true; c.Freeze = false; }
         p.destroyed = true;
         SnapWeightsOff(p);
+        foreach (var ar in p.GetComponentsInChildren<Arrow>()) ar.Drop();
         var pos = p.transform.position;
         Game.blood.Gibs(pos, (int)(p.mass * 3f) + 5, dirW, p.partId == "head");
         Game.blood.Mist(pos, dirW, 3f);

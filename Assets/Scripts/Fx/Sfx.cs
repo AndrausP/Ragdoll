@@ -64,6 +64,12 @@ public class Sfx : MonoBehaviour
         streams["shell"] = Mech(new[] { 0f }, new[] { 5200f }, 0.08f);
         streams["flame"] = Roar(1.2f);
         streams["throw"] = Swish(0.25f, 1.6f);
+        streams["crossbow"] = CrossbowShot();
+        streams["harpoon"] = HarpoonShot();
+        streams["nailgun"] = NailShot();
+        streams["winch"] = Winch();
+        streams["crossbow_load"] = Crank(1.9f, 11);
+        streams["harpoon_load"] = Crank(2.8f, 5);
         foreach (var n in RECORDED)
         {
             var arr = Resources.LoadAll<AudioClip>("Sounds/" + n);
@@ -365,6 +371,89 @@ public class Sfx : MonoBehaviour
             s[i] = Mathf.Sin(U.TAU * hz * t) * Mathf.Min(1f, (sec - t) * 80f);
         }
         return Wav(s, "tone");
+    }
+
+    /// Besta: estalo seco da corda + baque de madeira + zumbido curto
+    AudioClip CrossbowShot()
+    {
+        var s = Buf(0.5f); float ph = 0;
+        for (int i = 0; i < s.Length; i++)
+        {
+            float t = (float)i / RATE;
+            ph += 180f * (1f - t * 0.6f) / RATE;
+            float saw = (ph % 1f) * 2f - 1f;
+            s[i] = N() * Mathf.Exp(-t * 140f) * 1.1f + saw * Mathf.Exp(-t * 14f) * 0.45f
+                 + Mathf.Sin(U.TAU * 95f * t) * Mathf.Exp(-t * 30f) * 0.7f;
+        }
+        return Wav(s, "besta");
+    }
+
+    /// Arpão de elástico: borracha soltando (sopro grave) + metal batendo na guia
+    AudioClip HarpoonShot()
+    {
+        var s = Buf(0.7f); float lp = 0;
+        for (int i = 0; i < s.Length; i++)
+        {
+            float t = (float)i / RATE;
+            lp += (N() - lp) * 0.08f;
+            float ring = Mathf.Sin(U.TAU * 1450f * t) * 0.5f + Mathf.Sin(U.TAU * 2310f * t) * 0.3f;
+            s[i] = lp * 2.5f * Mathf.Exp(-t * 9f) + ring * Mathf.Exp(-t * 22f) * 0.5f + Mathf.Sin(U.TAU * 70f * t) * Mathf.Exp(-t * 18f) * 0.8f;
+        }
+        return Wav(s, "arpao");
+    }
+
+    /// Pistola de pregos: pistão pneumático (chiado curto) + batida metálica
+    AudioClip NailShot()
+    {
+        var s = Buf(0.22f);
+        for (int i = 0; i < s.Length; i++)
+        {
+            float t = (float)i / RATE;
+            s[i] = N() * Mathf.Exp(-t * 35f) * 0.7f + Mathf.Sin(U.TAU * 520f * t) * Mathf.Exp(-t * 60f) * 0.8f
+                 + Mathf.Sin(U.TAU * 3100f * t) * Mathf.Exp(-t * 90f) * 0.3f;
+        }
+        return Wav(s, "prego");
+    }
+
+    /// Corda sendo recolhida: catraca rápida em laço
+    AudioClip Winch()
+    {
+        var s = Buf(0.5f);
+        for (int k = 0; k < 14; k++)
+        {
+            int c = (int)(k * 0.035f * RATE);
+            for (int j = 0; j < 200; j++)
+                if (c + j < s.Length)
+                {
+                    float t = (float)j / RATE;
+                    s[c + j] += (N() * 0.5f + Mathf.Sin(U.TAU * 1700f * t)) * Mathf.Exp(-t * 220f);
+                }
+        }
+        return Wav(s, "recolher");
+    }
+
+    /// Recarga com manivela/elástico: `clicks` estalos espaçados ao longo de `sec` e uma trava no fim
+    AudioClip Crank(float sec, int clicks)
+    {
+        var s = Buf(sec);
+        for (int k = 0; k < clicks; k++)
+        {
+            int c = (int)((0.1f + k * (sec * 0.75f / clicks)) * RATE);
+            for (int j = 0; j < 400; j++)
+                if (c + j < s.Length)
+                {
+                    float t = (float)j / RATE;
+                    s[c + j] += (N() * 0.4f + Mathf.Sin(U.TAU * (1300f + k * 40f) * t)) * Mathf.Exp(-t * 150f) * 0.7f;
+                }
+        }
+        int latch = (int)(sec * 0.88f * RATE);
+        for (int j = 0; j < 900; j++)
+            if (latch + j < s.Length)
+            {
+                float t = (float)j / RATE;
+                s[latch + j] += (Mathf.Sin(U.TAU * 900f * t) + N() * 0.6f) * Mathf.Exp(-t * 60f);
+            }
+        return Wav(s, "recarga");
     }
 
     AudioClip Ratchet()

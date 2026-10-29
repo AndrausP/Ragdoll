@@ -263,6 +263,14 @@ public partial class Dummy
                 StartCoroutine(RestoreCollision(p.col, c.col, 0.6f));
             }
 
+        // virotes, facas e arpões cravados no lado de baixo do corte vão com o fragmento
+        foreach (var ar in p.GetComponentsInChildren<Arrow>())
+        {
+            if (ar.transform.parent != p.transform) continue;
+            var lp = p.transform.InverseTransformPoint(ar.transform.position) + def.pos;
+            if (Vector3.Dot(lp, axis) > s) ar.transform.SetParent(frag.transform, true);
+        }
+
         // partes penduradas no pedaço cortado passam a depender do fragmento
         var kids = new List<DummyPart>(p.childrenParts);
         p.childrenParts.Clear();

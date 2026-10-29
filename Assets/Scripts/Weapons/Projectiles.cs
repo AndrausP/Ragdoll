@@ -21,9 +21,9 @@ public class Arrow : MonoBehaviour
     {
         spinner = new GameObject("gira").transform;
         spinner.SetParent(transform, false);
-        bool knife = model == "dagger";
+        bool knife = model == "dagger" || model == "hatchet";
         var rot = knife ? U.Axis(Vector3.right, -Mathf.PI / 2) : U.Axis(Vector3.up, Mathf.PI);
-        float len = knife ? 0.28f : model == "bolt" ? 0.5f : model == "harpoon_bolt" ? 1.15f : 0.75f;
+        float len = model == "dagger" ? 0.28f : model == "hatchet" ? 0.36f : model == "bolt" ? 0.5f : model == "harpoon_bolt" ? 1.15f : model == "nail" ? 0.09f : 0.75f;
         var m = Game.Model(model, rot, len, out var sz);
         if (sz != Vector3.zero)
         {
@@ -42,7 +42,7 @@ public class Arrow : MonoBehaviour
             // gira em torno do centro da faca, não da ponta
             spinner.localPosition = new Vector3(0, 0, sz.z * 0.5f);
             m.transform.localPosition = Vector3.zero;
-            spinRate = U.RandRange(-1f, 1f) > 0 ? 22f : -22f;
+            spinRate = (U.RandRange(-1f, 1f) > 0 ? 1f : -1f) * (model == "hatchet" ? 14f : 22f);
         }
     }
 
@@ -103,6 +103,8 @@ public class Arrow : MonoBehaviour
         {
             Game.sfx.Play("thunk", h.position, -2f);
             if (h.body != null) h.body.AddForceAtPosition(dir * 3f, h.position, ForceMode.Impulse);
+            // arpão em parede ou objeto: a corda prende do mesmo jeito
+            if (tether && Game.player != null) new GameObject("corda").AddComponent<HarpoonRope>().Init(this, null, h.body);
         }
         if (spinRate != 0f)
         {
@@ -115,46 +117,89 @@ public class Arrow : MonoBehaviour
         stuck = true;
         if (h.body != null) transform.SetParent(h.body.transform, true);
     }
+
+    /// A peça onde estava cravado sumiu (destruída): o projétil cai solto em vez de ficar parado no ar.
+    public void Drop()
+    {
+        transform.SetParent(null, true);
+        gameObject.layer = Game.LAYER_PROPS;
+        var c = gameObject.AddComponent<CapsuleCollider>();
+        c.direction = 2; c.radius = 0.012f; c.height = 0.3f; c.center = new Vector3(0, 0, -0.1f);
+        var rb = gameObject.AddComponent<Rigidbody>();
+        rb.mass = 0.15f;
+        rb.linearVelocity = U.RandomUnit() * 1.5f + Vector3.up;
+        life = Mathf.Min(life, 20f);
+    }
 }
 
-/// Corda do arpão: liga o cano ao arpão cravado no boneco. Segurar o botão direito puxa o corpo até o jogador; Q solta.
+/// Corda do arpão: liga o cano ao arpão cravado num boneco, num objeto solto ou na parede. Segurar o botão direito
+/// recolhe a corda: puxa o corpo (ou o objeto) até o jogador; presa na parede, puxa o jogador até ela. Q solta; trocar
+/// de arma também solta. Frouxa, a corda faz barriga.
 public class HarpoonRope : MonoBehaviour
 {
-    Arrow harpoon; DummyPart part; LineRenderer line; float life = 25f;
+    public static bool testPull;        // testes automáticos: puxa sem o botão
+    Arrow harpoon; DummyPart part; Rigidbody body; LineRenderer line; float life = 40f, awayT, winchT;
+    bool pulling;
+    const int PTS = 14;
+    public float Distance { get; private set; }
 
-    public void Init(Arrow a, DummyPart p)
+    public void Init(Arrow a, DummyPart p, Rigidbody b = null)
     {
-        harpoon = a; part = p;
+        harpoon = a; part = p; body = p == null ? b : null;
         Game.Track(gameObject);
         line = gameObject.AddComponent<LineRenderer>();
-        line.positionCount = 2; line.startWidth = 0.012f; line.endWidth = 0.012f;
+        line.positionCount = PTS; line.startWidth = 0.011f; line.endWidth = 0.011f;
         line.material = Mats.Mat(new Color(0.06f, 0.05f, 0.04f), 0.9f);
         line.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
     }
 
     void FixedUpdate()
     {
-        life -= Time.fixedDeltaTime;
-        if (life <= 0f || harpoon == null || part == null || part.destroyed || Game.player == null) { Destroy(gameObject); return; }
+        float dt = Time.fixedDeltaTime;
+        life -= dt;
+        if (life <= 0f || harpoon == null || Game.player == null) { Destroy(gameObject); return; }
+        // o arpão pode ter mudado de peça (corte do membro onde estava cravado)
+        if (part != null && harpoon.transform.parent != null)
+        {
+            var pp = harpoon.transform.parent.GetComponent<DummyPart>();
+            if (pp != null) part = pp;
+        }
+        if (part != null && part.destroyed) { Destroy(gameObject); return; }
+        bool holding = Game.player.Weapon().id == "harpoon";
+        awayT = holding ? 0f : awayT + dt;
+        if (awayT > 0.6f || holding && InputX.Down(InputX.A.Reload)) { Destroy(gameObject); return; }
         var from = Game.player.RopeOrigin;
         var to = harpoon.transform.position;
         var diff = from - to;
         float dist = diff.magnitude;
-        if (InputX.Down(InputX.A.Reload) && Game.player.Weapon().id == "harpoon") { Destroy(gameObject); return; }
-        if (InputX.Alt && InputX.Captured && dist > 1.4f)
+        Distance = dist;
+        pulling = holding && (testPull || InputX.Alt && InputX.Captured) && dist > 1.4f;
+        if (!pulling) return;
+        winchT -= dt;
+        if (winchT <= 0f) { winchT = 0.45f; Game.sfx.PlayUI("winch", -10f, U.RandRange(0.95f, 1.05f)); }
+        var dir = diff / Mathf.Max(dist, 1e-4f);
+        if (part != null)
         {
             if (part.Freeze) part.dummy.Collapse();
             // puxa o corpo inteiro: força no pedaço atingido, proporcional à massa
             float m = Mathf.Max(part.mass, 3f);
-            part.rb.AddForce(diff.normalized * Mathf.Min(90f * m, 700f), ForceMode.Force);
-            foreach (var q in part.dummy.ValidParts()) if (q != part && !q.Freeze) q.rb.AddForce(diff.normalized * q.mass * 14f, ForceMode.Force);
+            part.rb.AddForce(dir * Mathf.Min(90f * m, 700f), ForceMode.Force);
+            foreach (var q in part.dummy.ValidParts()) if (q != part && !q.Freeze) q.rb.AddForce(dir * q.mass * 14f, ForceMode.Force);
         }
+        else if (body != null && !body.isKinematic) body.AddForce(dir * Mathf.Min(60f * body.mass, 600f), ForceMode.Force);
+        else Game.player.Pull(-dir * 22f * dt);      // parede: o jogador vai até o arpão
     }
 
     void LateUpdate()
     {
         if (harpoon == null || line == null || Game.player == null) return;
-        line.SetPosition(0, Game.player.RopeOrigin); line.SetPosition(1, harpoon.transform.position);
+        var a = Game.player.RopeOrigin; var b = harpoon.transform.position;
+        float sag = pulling ? 0f : Mathf.Min(0.6f, Vector3.Distance(a, b) * 0.06f);
+        for (int i = 0; i < PTS; i++)
+        {
+            float t = i / (PTS - 1f);
+            line.SetPosition(i, Vector3.Lerp(a, b, t) + Vector3.down * (sag * 4f * t * (1f - t)));
+        }
     }
 }
 
